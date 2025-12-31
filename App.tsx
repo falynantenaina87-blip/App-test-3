@@ -20,12 +20,21 @@ const App: React.FC = () => {
   useEffect(() => {
     const initApp = async () => {
       try {
-        // Check initial session
-        const u = await db.getCurrentUser();
+        // Ajout d'un timeout de 5 secondes pour éviter le chargement infini
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Délai d'attente dépassé (Timeout)")), 5000)
+        );
+
+        const sessionCheckPromise = db.getCurrentUser();
+        
+        // On attend soit la réponse de Supabase, soit le timeout
+        const u = await Promise.race([sessionCheckPromise, timeoutPromise]) as User | null;
+        
         setUser(u);
       } catch (err: any) {
         console.error("Initialization error:", err);
-        setInitError("Impossible de connecter à Supabase. Vérifiez les variables d'environnement (URL/KEY).");
+        // On affiche une erreur explicite si la connexion échoue
+        setInitError("Impossible de connecter à Supabase. Vérifiez votre connexion internet et les clés API.");
       } finally {
         setIsLoading(false);
       }
@@ -36,8 +45,11 @@ const App: React.FC = () => {
     // Listen for auth changes (Login/Logout anywhere)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN') {
-         const u = await db.getCurrentUser();
-         setUser(u);
+         // On recharge le profil complet lors du sign-in
+         try {
+           const u = await db.getCurrentUser();
+           setUser(u);
+         } catch(e) { console.error(e); }
       } else if (event === 'SIGNED_OUT') {
          setUser(null);
       }
@@ -63,9 +75,14 @@ const App: React.FC = () => {
     return (
       <div className="h-screen bg-mandarin-black flex flex-col items-center justify-center text-mandarin-red p-6 text-center">
         <AlertTriangle size={48} className="mb-4" />
-        <h2 className="text-xl font-bold mb-2">Erreur de Configuration</h2>
+        <h2 className="text-xl font-bold mb-2">Erreur de Connexion</h2>
         <p className="text-gray-400 max-w-md">{initError}</p>
-        <p className="text-xs text-gray-600 mt-4">Code: CONNECTION_FAILED</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="mt-6 bg-mandarin-surface border border-mandarin-border text-white px-4 py-2 rounded hover:bg-gray-800 transition text-sm"
+        >
+          Réessayer
+        </button>
       </div>
     );
   }
