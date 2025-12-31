@@ -1,12 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Cast import.meta to any to resolve TypeScript error "Property 'env' does not exist on type 'ImportMeta'"
-// Provide fallbacks to prevent crash during initialization if variables are missing
-const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || "https://placeholder.supabase.co";
-const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || "placeholder-key";
+// Cast import.meta to any to resolve TypeScript error
+const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
+const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
 
-if ((import.meta as any).env.VITE_SUPABASE_URL === undefined) {
-  console.error("VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set in your environment variables. Using placeholder values.");
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error("ERREUR CRITIQUE : VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY sont manquants. Vérifiez vos variables d'environnement sur Vercel.");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');

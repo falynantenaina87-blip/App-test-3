@@ -26,6 +26,42 @@ export const db = {
     return await supabase.auth.signInWithPassword({ email, password });
   },
 
+  signUp: async (email: string, password: string, name: string, role: UserRole) => {
+    // 1. Create Auth User
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { name, role } // Metadata stored in auth.users
+      }
+    });
+
+    if (authError) throw authError;
+
+    // 2. Create Public Profile
+    // Note: Ideally a Postgres Trigger handles this, but we do it manually here to be safe
+    // in case the trigger isn't set up in the user's DB.
+    if (authData.user) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert([
+          { 
+            id: authData.user.id, 
+            name: name, 
+            role: role,
+            email: email // Storing email in profile for easier admin visibility
+          }
+        ]);
+      
+      if (profileError) {
+        console.error("Error creating profile:", profileError);
+        // If profile creation fails (e.g. trigger already did it), we continue.
+      }
+    }
+
+    return { data: authData, error: null };
+  },
+
   logout: async () => {
     return await supabase.auth.signOut();
   },
