@@ -7,7 +7,7 @@ import Quiz from './components/Quiz';
 import { db } from './services/databaseService';
 import { supabase } from './services/supabaseClient';
 import { User } from './types';
-import { MessageSquare, Bell, BookOpen, LogOut, BarChart2 } from 'lucide-react';
+import { MessageSquare, Bell, BookOpen, LogOut, BarChart2, AlertTriangle } from 'lucide-react';
 
 type View = 'CHAT' | 'ANNOUNCEMENTS' | 'QUIZ' | 'DASHBOARD';
 
@@ -15,13 +15,23 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<View>('CHAT');
   const [isLoading, setIsLoading] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check initial session
-    db.getCurrentUser().then(u => {
-      setUser(u);
-      setIsLoading(false);
-    });
+    const initApp = async () => {
+      try {
+        // Check initial session
+        const u = await db.getCurrentUser();
+        setUser(u);
+      } catch (err: any) {
+        console.error("Initialization error:", err);
+        setInitError("Impossible de connecter à Supabase. Vérifiez les variables d'environnement (URL/KEY).");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initApp();
 
     // Listen for auth changes (Login/Logout anywhere)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -41,7 +51,23 @@ const App: React.FC = () => {
   };
 
   if (isLoading) {
-    return <div className="h-screen bg-mandarin-black flex items-center justify-center text-white">Chargement...</div>;
+    return (
+      <div className="h-screen bg-mandarin-black flex flex-col items-center justify-center text-white gap-4">
+        <div className="w-8 h-8 border-4 border-mandarin-blue border-t-transparent rounded-full animate-spin"></div>
+        <p className="animate-pulse text-sm">Connexion au serveur...</p>
+      </div>
+    );
+  }
+
+  if (initError) {
+    return (
+      <div className="h-screen bg-mandarin-black flex flex-col items-center justify-center text-mandarin-red p-6 text-center">
+        <AlertTriangle size={48} className="mb-4" />
+        <h2 className="text-xl font-bold mb-2">Erreur de Configuration</h2>
+        <p className="text-gray-400 max-w-md">{initError}</p>
+        <p className="text-xs text-gray-600 mt-4">Code: CONNECTION_FAILED</p>
+      </div>
+    );
   }
 
   if (!user) {

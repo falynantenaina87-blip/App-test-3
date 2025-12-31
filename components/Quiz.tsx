@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/databaseService';
 import { generateQuizQuestions } from '../services/geminiService';
 import { QuizQuestion, User, UserRole, QuizResult } from '../types';
-import { CheckCircle, XCircle, ArrowRight, Award, BrainCircuit, Lock } from 'lucide-react';
+import { CheckCircle, XCircle, ArrowRight, Award, BrainCircuit, Lock, Sparkles } from 'lucide-react';
 
 // Fallback questions if AI fails or manual default
 const DEFAULT_QUESTIONS: QuizQuestion[] = [
@@ -30,6 +30,9 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [previousResult, setPreviousResult] = useState<QuizResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  
+  // New state for topic generation
+  const [quizTopic, setQuizTopic] = useState('');
 
   useEffect(() => {
     // 1. Check if user already took the quiz
@@ -45,8 +48,13 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
 
   // Admin function to generate new questions
   const handleGenerateAI = async () => {
+    if (!quizTopic.trim()) {
+        alert("Veuillez entrer un mot ou une phrase pour générer le quiz.");
+        return;
+    }
+
     setIsGenerating(true);
-    const newQuestions = await generateQuizQuestions();
+    const newQuestions = await generateQuizQuestions(quizTopic);
     if (newQuestions.length > 0) {
         setQuestions(newQuestions);
         // Reset quiz state for demo purposes so admin can test it
@@ -121,17 +129,36 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
 
   return (
     <div className="h-full bg-mandarin-black p-4 flex flex-col max-w-2xl mx-auto">
-      {/* Admin Toolbar */}
+      {/* Admin Toolbar - Only visible to Admin */}
       {currentUser.role === UserRole.ADMIN && (
-        <div className="mb-4 flex justify-end">
-            <button 
-                onClick={handleGenerateAI}
-                disabled={isGenerating}
-                className="flex items-center gap-2 bg-mandarin-blue/20 text-mandarin-blue border border-mandarin-blue px-3 py-1 rounded hover:bg-mandarin-blue/30 text-sm transition"
-            >
+        <div className="mb-6 p-4 bg-mandarin-surface border border-mandarin-blue/30 rounded-xl shadow-lg">
+            <div className="flex items-center gap-2 mb-2 text-mandarin-blue text-sm font-bold uppercase tracking-wider">
                 <BrainCircuit size={16} />
-                {isGenerating ? 'Génération...' : 'Générer Quiz (IA)'}
-            </button>
+                <span>Générateur IA</span>
+            </div>
+            <div className="flex gap-2">
+                <input 
+                    type="text"
+                    value={quizTopic}
+                    onChange={(e) => setQuizTopic(e.target.value)}
+                    placeholder="Sujet, mot ou phrase (ex: 'La famille', 'Manger', '你好')"
+                    className="flex-1 bg-black border border-mandarin-border rounded px-3 py-2 text-white focus:border-mandarin-blue outline-none text-sm"
+                />
+                <button 
+                    onClick={handleGenerateAI}
+                    disabled={isGenerating || !quizTopic.trim()}
+                    className="flex items-center gap-2 bg-mandarin-blue text-white px-4 py-2 rounded hover:bg-blue-600 text-sm transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {isGenerating ? (
+                        <span className="animate-pulse">Création...</span>
+                    ) : (
+                        <>
+                            <Sparkles size={16} />
+                            <span>Générer</span>
+                        </>
+                    )}
+                </button>
+            </div>
         </div>
       )}
 

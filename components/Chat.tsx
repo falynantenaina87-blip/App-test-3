@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { User, Message, UserRole } from '../types';
 import { db } from '../services/databaseService';
 import { translateToMandarin } from '../services/geminiService';
-import { Send, Globe, Sparkles, AlertCircle } from 'lucide-react';
+import { Send, Globe, Sparkles, AlertCircle, Wifi, WifiOff } from 'lucide-react';
 
 interface ChatProps {
   currentUser: User;
@@ -12,6 +12,7 @@ const Chat: React.FC<ChatProps> = ({ currentUser }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTranslating, setIsTranslating] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'CONNECTING' | 'SUBSCRIBED' | 'ERROR'>('CONNECTING');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Helper to detect Chinese characters
@@ -25,10 +26,18 @@ const Chat: React.FC<ChatProps> = ({ currentUser }) => {
     };
     loadMessages();
 
-    // Realtime Subscription
-    const subscription = db.subscribeToMessages((newMessage) => {
-      setMessages((prev) => [...prev, newMessage]);
-    });
+    // Realtime Subscription with Status Monitoring
+    const subscription = db.subscribeToMessages(
+      (newMessage) => {
+        setMessages((prev) => [...prev, newMessage]);
+      },
+      (status) => {
+        console.log("Realtime Status:", status);
+        if (status === 'SUBSCRIBED') setConnectionStatus('SUBSCRIBED');
+        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') setConnectionStatus('ERROR');
+        else setConnectionStatus('CONNECTING');
+      }
+    );
 
     return () => {
       subscription.unsubscribe();
@@ -70,9 +79,23 @@ const Chat: React.FC<ChatProps> = ({ currentUser }) => {
       {/* Header */}
       <div className="p-4 border-b border-mandarin-border bg-mandarin-black sticky top-0 z-10 flex justify-between items-center">
         <h2 className="text-xl font-bold text-mandarin-blue academia-serif">Chat de Classe (L1 G5)</h2>
-        <div className="text-xs text-gray-500 flex items-center gap-2">
-           <span className="w-2 h-2 bg-mandarin-green rounded-full animate-pulse"></span>
-           En Direct
+        <div className="flex items-center gap-2">
+           {connectionStatus === 'SUBSCRIBED' ? (
+             <div className="flex items-center gap-1 text-xs text-mandarin-green">
+               <span className="w-2 h-2 bg-mandarin-green rounded-full animate-pulse"></span>
+               <span>En Direct</span>
+             </div>
+           ) : connectionStatus === 'ERROR' ? (
+             <div className="flex items-center gap-1 text-xs text-mandarin-red" title="Vérifiez votre connexion internet ou la configuration Supabase Realtime">
+               <WifiOff size={14} />
+               <span>Déconnecté</span>
+             </div>
+           ) : (
+             <div className="flex items-center gap-1 text-xs text-mandarin-yellow">
+               <span className="w-2 h-2 bg-mandarin-yellow rounded-full animate-ping"></span>
+               <span>Connexion...</span>
+             </div>
+           )}
         </div>
       </div>
 
@@ -123,6 +146,13 @@ const Chat: React.FC<ChatProps> = ({ currentUser }) => {
           );
         })}
         <div ref={messagesEndRef} />
+        
+        {/* Empty State */}
+        {messages.length === 0 && (
+          <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50 mt-10">
+            <p>Aucun message. Lancez la conversation !</p>
+          </div>
+        )}
       </div>
 
       {/* Input Area */}
@@ -147,13 +177,13 @@ const Chat: React.FC<ChatProps> = ({ currentUser }) => {
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
             placeholder="Écrivez un message... (@prof pour alerte)"
-            className="flex-1 bg-mandarin-black border border-mandarin-border rounded-lg px-4 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-mandarin-blue focus:ring-1 focus:ring-mandarin-blue transition-all"
+            className="flex-1 bg-mandarin-black border border-mandarin-border rounded-lg px-4 py-2 text-white focus:border-mandarin-blue focus:ring-1 focus:ring-mandarin-blue outline-none transition"
           />
           
           <button
             onClick={handleSendMessage}
             disabled={!inputText.trim()}
-            className="bg-mandarin-blue text-white p-3 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-mandarin-blue text-white p-3 rounded-lg hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send size={20} />
           </button>

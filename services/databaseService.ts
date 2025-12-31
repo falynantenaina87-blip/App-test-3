@@ -89,7 +89,10 @@ export const db = {
     if (error) console.error('Error sending message:', error);
   },
 
-  subscribeToMessages: (callback: (msg: Message) => void) => {
+  subscribeToMessages: (
+    onMessage: (msg: Message) => void,
+    onStatusChange?: (status: 'SUBSCRIBED' | 'TIMED_OUT' | 'CLOSED' | 'CHANNEL_ERROR') => void
+  ) => {
     return supabase
       .channel('public:messages')
       .on(
@@ -103,10 +106,12 @@ export const db = {
             .eq('id', payload.new.id)
             .single();
           
-          if (data) callback(data as Message);
+          if (data) onMessage(data as Message);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (onStatusChange) onStatusChange(status);
+      });
   },
 
   // --- ANNOUNCEMENTS (Realtime) ---
