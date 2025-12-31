@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/databaseService';
 import { generateQuizQuestions } from '../services/geminiService';
 import { QuizQuestion, User, UserRole, QuizResult } from '../types';
-import { CheckCircle, XCircle, ArrowRight, Award, BrainCircuit, Lock, Sparkles } from 'lucide-react';
+import { CheckCircle, XCircle, ArrowRight, Award, BrainCircuit, Lock, Sparkles, SlidersHorizontal } from 'lucide-react';
 
 // Fallback questions if AI fails or manual default
 const DEFAULT_QUESTIONS: QuizQuestion[] = [
@@ -31,8 +31,9 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
   const [previousResult, setPreviousResult] = useState<QuizResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   
-  // New state for topic generation
-  const [quizTopic, setQuizTopic] = useState('');
+  // Inputs pour l'IA
+  const [quizContext, setQuizContext] = useState('');
+  const [quizObjective, setQuizObjective] = useState('Vocabulaire');
 
   useEffect(() => {
     // 1. Check if user already took the quiz
@@ -48,13 +49,15 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
 
   // Admin function to generate new questions
   const handleGenerateAI = async () => {
-    if (!quizTopic.trim()) {
-        alert("Veuillez entrer un mot ou une phrase pour générer le quiz.");
+    if (!quizContext.trim()) {
+        alert("Veuillez entrer un contexte (mot, phrase, texte) pour générer le quiz.");
         return;
     }
 
     setIsGenerating(true);
-    const newQuestions = await generateQuizQuestions(quizTopic);
+    // Appel avec les deux paramètres : contexte et objectif
+    const newQuestions = await generateQuizQuestions(quizContext, quizObjective);
+    
     if (newQuestions.length > 0) {
         setQuestions(newQuestions);
         // Reset quiz state for demo purposes so admin can test it
@@ -63,6 +66,8 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
         setCurrentQuestionIndex(0);
         setIsAnswered(false);
         setSelectedOption(null);
+    } else {
+        alert("L'IA n'a pas pu générer le quiz. Veuillez réessayer.");
     }
     setIsGenerating(false);
   };
@@ -132,29 +137,53 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
       {/* Admin Toolbar - Only visible to Admin */}
       {currentUser.role === UserRole.ADMIN && (
         <div className="mb-6 p-4 bg-mandarin-surface border border-mandarin-blue/30 rounded-xl shadow-lg">
-            <div className="flex items-center gap-2 mb-2 text-mandarin-blue text-sm font-bold uppercase tracking-wider">
+            <div className="flex items-center gap-2 mb-3 text-mandarin-blue text-sm font-bold uppercase tracking-wider">
                 <BrainCircuit size={16} />
                 <span>Générateur IA</span>
             </div>
-            <div className="flex gap-2">
-                <input 
-                    type="text"
-                    value={quizTopic}
-                    onChange={(e) => setQuizTopic(e.target.value)}
-                    placeholder="Sujet, mot ou phrase (ex: 'La famille', 'Manger', '你好')"
-                    className="flex-1 bg-black border border-mandarin-border rounded px-3 py-2 text-white focus:border-mandarin-blue outline-none text-sm"
-                />
+            
+            <div className="flex flex-col gap-3">
+                {/* Ligne 1: Inputs */}
+                <div className="flex flex-col md:flex-row gap-2">
+                    <input 
+                        type="text"
+                        value={quizContext}
+                        onChange={(e) => setQuizContext(e.target.value)}
+                        placeholder="Contexte (ex: 'La famille', 'Commander au resto'...)"
+                        className="flex-[2] bg-black border border-mandarin-border rounded px-3 py-2 text-white focus:border-mandarin-blue outline-none text-sm placeholder-gray-600"
+                    />
+                    
+                    <div className="flex-1 relative">
+                        <SlidersHorizontal size={14} className="absolute left-3 top-3 text-gray-500 pointer-events-none"/>
+                        <select 
+                            value={quizObjective} 
+                            onChange={(e) => setQuizObjective(e.target.value)}
+                            className="w-full bg-black border border-mandarin-border rounded px-3 py-2 pl-9 text-white focus:border-mandarin-blue outline-none text-sm appearance-none cursor-pointer hover:bg-gray-900 transition"
+                        >
+                            <option value="Vocabulaire">Vocabulaire</option>
+                            <option value="Grammaire">Grammaire</option>
+                            <option value="Compréhension Écrite">Compréhension</option>
+                            <option value="Traduction & Structure">Traduction</option>
+                            <option value="Culture & Civilisation">Culture</option>
+                        </select>
+                    </div>
+                </div>
+
+                {/* Ligne 2: Bouton Action */}
                 <button 
                     onClick={handleGenerateAI}
-                    disabled={isGenerating || !quizTopic.trim()}
-                    className="flex items-center gap-2 bg-mandarin-blue text-white px-4 py-2 rounded hover:bg-blue-600 text-sm transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isGenerating || !quizContext.trim()}
+                    className="w-full flex items-center justify-center gap-2 bg-mandarin-blue text-white px-4 py-2 rounded hover:bg-blue-600 text-sm transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {isGenerating ? (
-                        <span className="animate-pulse">Création...</span>
+                        <span className="animate-pulse flex items-center gap-2">
+                            <Sparkles size={16} className="animate-spin" />
+                            Génération du questionnaire...
+                        </span>
                     ) : (
                         <>
                             <Sparkles size={16} />
-                            <span>Générer</span>
+                            <span>Générer le Quiz</span>
                         </>
                     )}
                 </button>

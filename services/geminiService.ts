@@ -3,7 +3,7 @@ import { QuizQuestion } from "../types";
 // Declaration globale pour Puter.js (chargé via CDN dans index.html)
 declare const puter: any;
 
-// Helper pour nettoyer le JSON retourné par les LLM (qui ajoutent souvent du markdown ```json ... ```)
+// Helper pour nettoyer le JSON retourné par les LLM
 const cleanJson = (text: string): string => {
   return text.replace(/```json/g, '').replace(/```/g, '').trim();
 };
@@ -21,14 +21,10 @@ export const translateToMandarin = async (text: string): Promise<{ hanzi: string
     IMPORTANT: Return ONLY a valid JSON object. Do not include any explanation or markdown formatting.
     Format: {"hanzi": "...", "pinyin": "..."}`;
 
-    // Appel via Puter.js
     const response = await puter.ai.chat(prompt, { model: 'gemini-1.5-flash' });
-    
-    // Puter retourne généralement un objet ou une string selon le contexte, on sécurise l'accès au message
     const resultText = typeof response === 'string' ? response : response?.message?.content || response?.toString();
 
     if (!resultText) return null;
-    
     return JSON.parse(cleanJson(resultText));
 
   } catch (error) {
@@ -37,34 +33,31 @@ export const translateToMandarin = async (text: string): Promise<{ hanzi: string
   }
 };
 
-export const generateQuizQuestions = async (topic: string): Promise<QuizQuestion[]> => {
+export const generateQuizQuestions = async (context: string, objective: string): Promise<QuizQuestion[]> => {
   if (typeof puter === 'undefined') return [];
 
   try {
-    const prompt = `Génère 5 questions à choix multiples (QCM) pour des étudiants universitaires de Mandarin (Niveau L1/Débutant).
-    
-    Le contexte/sujet du quiz est : "${topic}".
-    
-    Consignes strictes :
-    1. Les questions doivent être directement liées au sujet ou aux mots fournis dans le contexte "${topic}".
-    2. Mélange les types de questions : 
-       - Traduire du Français vers le Hanzi.
-       - Traduire du Hanzi vers le Français.
-       - Grammaire ou contexte culturel lié à "${topic}".
-    3. L'explication doit être en Français.
-    4. Fournis 4 choix de réponse par question.
+    // Construction du prompt combiné (System + User instruction)
+    const prompt = `
+    INSTRUCTION SYSTÈME :
+    Tu es un professeur de Mandarin expert. Ton but est de générer un quiz de 5 questions à partir du texte fourni par l'utilisateur. Si le texte n'a aucun rapport avec le chinois, adapte-le quand même pour créer des exercices de mandarin (traduction, tons, pinyin ou grammaire). Réponds uniquement au format JSON pour que je puisse parser les questions facilement.
 
-    IMPORTANT: Retourne UNIQUEMENT un tableau JSON valide. Pas de markdown, pas de texte avant ou après.
-    Structure attendue :
+    DÉTAILS DE LA DEMANDE :
+    - Contexte / Texte de base : "${context}"
+    - Objectif pédagogique : "${objective}"
+
+    FORMAT DE RÉPONSE ATTENDU (JSON Array strict) :
     [
       {
-        "id": "q1",
-        "question": "...",
-        "options": ["...", "...", "...", "..."],
-        "correctAnswer": "...",
-        "explanation": "..."
+        "question": "La question en français ou mandarin",
+        "options": ["Choix A", "Choix B", "Choix C", "Choix D"],
+        "correctAnswer": "La bonne réponse (doit correspondre exactement à l'une des options)",
+        "explanation": "Explication pédagogique en français sur pourquoi c'est la bonne réponse."
       }
-    ]`;
+    ]
+    
+    IMPORTANT : Ne mets aucun texte avant ou après le JSON.
+    `;
 
     const response = await puter.ai.chat(prompt, { model: 'gemini-1.5-flash' });
     
@@ -72,8 +65,9 @@ export const generateQuizQuestions = async (topic: string): Promise<QuizQuestion
 
     if (!resultText) return [];
     
-    // On ajoute des IDs uniques au cas où l'IA oublie ou duplique
     const questions = JSON.parse(cleanJson(resultText));
+    
+    // Ajout d'IDs uniques
     return questions.map((q: any, index: number) => ({
       ...q,
       id: `ai_${Date.now()}_${index}`
