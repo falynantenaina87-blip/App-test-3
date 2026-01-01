@@ -9,7 +9,7 @@ import Schedule from './components/Schedule';
 import { db } from './services/databaseService';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 import { User } from './types';
-import { MessageSquare, Bell, BookOpen, LogOut, Calendar, AlertTriangle, Settings, RefreshCw } from 'lucide-react';
+import { MessageSquare, Bell, BookOpen, LogOut, Calendar, AlertTriangle, Settings, RefreshCw, Server, CloudLightning } from 'lucide-react';
 
 type View = 'CHAT' | 'ANNOUNCEMENTS' | 'QUIZ' | 'SCHEDULE';
 
@@ -17,6 +17,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<View>('CHAT');
   const [isLoading, setIsLoading] = useState(true);
+  const [isSlowLoading, setIsSlowLoading] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   
   const [manualUrl, setManualUrl] = useState('');
@@ -31,20 +32,30 @@ const App: React.FC = () => {
     }
 
     setIsLoading(true);
+    setIsSlowLoading(false);
     setInitError(null);
+
+    // Timer pour afficher le message "Réveil du serveur" si ça prend plus de 2s
+    const slowTimer = setTimeout(() => setIsSlowLoading(true), 2500);
+
     try {
-      // Augmentation du timeout à 15s pour les "cold starts" de Supabase (Free Tier)
+      // Augmentation drastique du timeout à 45s pour les "cold starts" de Supabase (Free Tier)
+      // Les serveurs gratuits se mettent en veille et mettent ~20-30s à se réveiller.
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Le serveur met trop de temps à répondre.")), 15000)
+        setTimeout(() => reject(new Error("Le serveur met trop de temps à répondre (Cold Start).")), 45000)
       );
+      
       const sessionCheckPromise = db.getCurrentUser();
+      
       const u = await Promise.race([sessionCheckPromise, timeoutPromise]) as User | null;
       setUser(u);
     } catch (err: any) {
       console.error("Init Error:", err);
       setInitError(err.message || "Impossible de connecter à Supabase.");
     } finally {
+      clearTimeout(slowTimer);
       setIsLoading(false);
+      setIsSlowLoading(false);
     }
   };
 
@@ -70,12 +81,29 @@ const App: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="h-screen bg-mandarin-black flex flex-col items-center justify-center text-white gap-6 relative z-20">
+      <div className="h-screen bg-mandarin-black flex flex-col items-center justify-center text-white gap-8 relative z-20 p-6 text-center">
         <div className="relative">
-             <div className="w-16 h-16 border-4 border-white/10 rounded-full"></div>
-             <div className="w-16 h-16 border-4 border-mandarin-blue border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
+             <div className="w-20 h-20 border-4 border-white/10 rounded-full"></div>
+             <div className="w-20 h-20 border-4 border-mandarin-blue border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
+             <div className="absolute inset-0 flex items-center justify-center">
+                 <Server size={24} className="text-white/30" />
+             </div>
         </div>
-        <p className="animate-pulse text-xs tracking-[0.3em] font-bold text-mandarin-blue">CONNEXION...</p>
+        
+        <div className="space-y-2 animate-fade-in">
+            <p className="text-xs tracking-[0.3em] font-bold text-mandarin-blue uppercase">Connexion</p>
+            {isSlowLoading && (
+                <div className="bg-mandarin-yellow/10 border border-mandarin-yellow/20 p-4 rounded-xl max-w-xs mx-auto animate-slide-up">
+                    <p className="text-mandarin-yellow font-bold text-sm mb-1 flex items-center justify-center gap-2">
+                        <CloudLightning size={16} />
+                        Réveil de la base de données...
+                    </p>
+                    <p className="text-gray-400 text-xs leading-relaxed">
+                        Le serveur Supabase (version gratuite) sort de veille. Cela peut prendre jusqu'à 30 secondes. Merci de patienter.
+                    </p>
+                </div>
+            )}
+        </div>
       </div>
     );
   }
@@ -84,14 +112,13 @@ const App: React.FC = () => {
     return (
       <div className="h-screen bg-mandarin-black flex flex-col items-center justify-center text-mandarin-red p-6 text-center overflow-auto relative z-20">
         <AlertTriangle size={64} className="mb-6 animate-bounce-slight" />
-        <h2 className="text-2xl font-bold mb-2 text-white">Configuration Requise</h2>
+        <h2 className="text-2xl font-bold mb-2 text-white">Connexion Interrompue</h2>
         <p className="text-gray-400 mb-6 max-w-xs mx-auto text-sm">{initError}</p>
         
-        {/* Afficher le bouton réessayer seulement si ce n'est pas une erreur de config manquante */}
         {isSupabaseConfigured() && (
             <button 
             onClick={initApp}
-            className="bg-white text-black px-6 py-2 rounded-full font-bold hover:bg-gray-200 transition mb-8 flex items-center gap-2"
+            className="bg-white text-black px-8 py-3 rounded-full font-bold hover:bg-gray-200 transition mb-8 flex items-center gap-2 shadow-lg active:scale-95"
             >
             <RefreshCw size={18} /> Réessayer
             </button>
@@ -102,7 +129,7 @@ const App: React.FC = () => {
                 <Settings size={20} /> Paramètres Supabase
             </h3>
             <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-                Ces informations se trouvent dans votre tableau de bord Supabase (Settings &gt; API).
+                Si l'erreur persiste, vérifiez que l'URL et la Clé API sont correctes dans Vercel ou ci-dessous.
             </p>
             <div className="space-y-4">
                 <div>
