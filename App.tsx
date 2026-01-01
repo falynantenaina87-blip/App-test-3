@@ -7,7 +7,7 @@ import Announcements from './components/Announcements';
 import Quiz from './components/Quiz';
 import Schedule from './components/Schedule';
 import { db } from './services/databaseService';
-import { supabase } from './services/supabaseClient';
+import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 import { User } from './types';
 import { MessageSquare, Bell, BookOpen, LogOut, Calendar, AlertTriangle, Settings, RefreshCw } from 'lucide-react';
 
@@ -23,12 +23,19 @@ const App: React.FC = () => {
   const [manualKey, setManualKey] = useState('');
 
   const initApp = async () => {
+    // 1. Vérification immédiate de la configuration
+    if (!isSupabaseConfigured()) {
+       setInitError("Application non configurée. Veuillez entrer l'URL et la Clé API de votre projet Supabase.");
+       setIsLoading(false);
+       return;
+    }
+
     setIsLoading(true);
     setInitError(null);
     try {
       // Augmentation du timeout à 15s pour les "cold starts" de Supabase (Free Tier)
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Délai d'attente dépassé (Connexion lente)")), 15000)
+        setTimeout(() => reject(new Error("Le serveur met trop de temps à répondre.")), 15000)
       );
       const sessionCheckPromise = db.getCurrentUser();
       const u = await Promise.race([sessionCheckPromise, timeoutPromise]) as User | null;
@@ -77,25 +84,38 @@ const App: React.FC = () => {
     return (
       <div className="h-screen bg-mandarin-black flex flex-col items-center justify-center text-mandarin-red p-6 text-center overflow-auto relative z-20">
         <AlertTriangle size={64} className="mb-6 animate-bounce-slight" />
-        <h2 className="text-2xl font-bold mb-2 text-white">Erreur de Connexion</h2>
-        <p className="text-gray-400 mb-6 max-w-xs mx-auto">{initError}</p>
+        <h2 className="text-2xl font-bold mb-2 text-white">Configuration Requise</h2>
+        <p className="text-gray-400 mb-6 max-w-xs mx-auto text-sm">{initError}</p>
         
-        <button 
-          onClick={initApp}
-          className="bg-white text-black px-6 py-2 rounded-full font-bold hover:bg-gray-200 transition mb-8 flex items-center gap-2"
-        >
-          <RefreshCw size={18} /> Réessayer
-        </button>
+        {/* Afficher le bouton réessayer seulement si ce n'est pas une erreur de config manquante */}
+        {isSupabaseConfigured() && (
+            <button 
+            onClick={initApp}
+            className="bg-white text-black px-6 py-2 rounded-full font-bold hover:bg-gray-200 transition mb-8 flex items-center gap-2"
+            >
+            <RefreshCw size={18} /> Réessayer
+            </button>
+        )}
 
         <div className="bg-mandarin-surface border border-mandarin-border p-8 rounded-2xl w-full max-w-md text-left shadow-2xl">
             <h3 className="text-white font-bold mb-6 flex items-center gap-2 text-lg">
-                <Settings size={20} /> Configuration Manuelle
+                <Settings size={20} /> Paramètres Supabase
             </h3>
-            <p className="text-xs text-gray-500 mb-4">Si le problème persiste, vérifiez les clés API.</p>
+            <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+                Ces informations se trouvent dans votre tableau de bord Supabase (Settings &gt; API).
+            </p>
             <div className="space-y-4">
-                <input type="text" value={manualUrl} onChange={(e) => setManualUrl(e.target.value)} placeholder="Project URL" className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white text-sm focus:border-mandarin-blue outline-none" />
-                <input type="text" value={manualKey} onChange={(e) => setManualKey(e.target.value)} placeholder="Anon Key" className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white text-sm focus:border-mandarin-blue outline-none" />
-                <button onClick={saveConfig} disabled={!manualUrl || !manualKey} className="w-full bg-mandarin-blue text-white py-3 rounded-xl hover:shadow-glow-blue transition font-bold text-sm mt-2">Sauvegarder</button>
+                <div>
+                    <label className="text-xs text-gray-400 font-bold ml-1 mb-1 block">Project URL</label>
+                    <input type="text" value={manualUrl} onChange={(e) => setManualUrl(e.target.value)} placeholder="https://..." className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white text-sm focus:border-mandarin-blue outline-none transition-colors" />
+                </div>
+                <div>
+                    <label className="text-xs text-gray-400 font-bold ml-1 mb-1 block">Project API Key (anon/public)</label>
+                    <input type="text" value={manualKey} onChange={(e) => setManualKey(e.target.value)} placeholder="eyJhbG..." className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white text-sm focus:border-mandarin-blue outline-none transition-colors" />
+                </div>
+                <button onClick={saveConfig} disabled={!manualUrl || !manualKey} className="w-full bg-mandarin-blue text-white py-3 rounded-xl hover:shadow-glow-blue transition font-bold text-sm mt-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                    Enregistrer et Connecter
+                </button>
             </div>
         </div>
       </div>

@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 
 // Fonction utilitaire pour récupérer les variables d'environnement de manière sécurisée
@@ -36,13 +37,17 @@ const supabaseUrl = getLocal('VITE_SUPABASE_URL') || getEnv('VITE_SUPABASE_URL')
 const supabaseAnonKey = getLocal('VITE_SUPABASE_ANON_KEY') || getEnv('VITE_SUPABASE_ANON_KEY');
 
 // Si les clés sont manquantes, on utilise des valeurs fictives pour ne pas bloquer le chargement du script.
-// Les appels API échoueront gracieusement (ou via timeout) au lieu de causer une page blanche.
 const safeUrl = (supabaseUrl && supabaseUrl.startsWith('http')) ? supabaseUrl : 'https://placeholder-project.supabase.co';
 const safeKey = supabaseAnonKey || 'placeholder-key';
 
 if (safeKey === 'placeholder-key') {
   console.warn("Supabase Warning: Variables d'environnement manquantes. L'authentification ne fonctionnera pas.");
 }
+
+// Export d'un indicateur de configuration
+export const isSupabaseConfigured = () => {
+    return safeUrl !== 'https://placeholder-project.supabase.co' && safeKey !== 'placeholder-key';
+};
 
 export const supabase = createClient(safeUrl, safeKey, {
   auth: {
