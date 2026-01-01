@@ -1,80 +1,94 @@
+import { GoogleGenAI, Type } from "@google/genai";
 import { QuizQuestion } from "../types";
 
-// Declaration globale pour Puter.js (chargé via CDN dans index.html)
-declare const puter: any;
+// Initialisation de l'IA
+// NOTE: La clé API doit être définie dans les variables d'environnement Vercel (process.env.API_KEY)
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Helper pour nettoyer le JSON retourné par les LLM
-const cleanJson = (text: string): string => {
-  return text.replace(/```json/g, '').replace(/```/g, '').trim();
-};
+// Modèle optimisé pour les tâches de texte rapides (Basic Text Tasks)
+const MODEL_NAME = 'gemini-3-flash-preview';
 
 export const translateToMandarin = async (text: string): Promise<{ hanzi: string, pinyin: string } | null> => {
-  if (typeof puter === 'undefined') {
-    console.error("Puter.js n'est pas chargé.");
-    return null;
-  }
-
   try {
-    const prompt = `Translate the following French or English text to Simplified Chinese (Hanzi) and provide the Pinyin. 
-    Text: "${text}"
-    
-    IMPORTANT: Return ONLY a valid JSON object. Do not include any explanation or markdown formatting.
-    Format: {"hanzi": "...", "pinyin": "..."}`;
+    const response = await ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: `Translate the following French or English text to Simplified Chinese (Hanzi) and provide the Pinyin. 
+      Text: "${text}"`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            hanzi: { type: Type.STRING, description: "The simplified Chinese characters" },
+            pinyin: { type: Type.STRING, description: "The Pinyin with tone marks" }
+          },
+          required: ["hanzi", "pinyin"]
+        }
+      }
+    });
 
-    const response = await puter.ai.chat(prompt, { model: 'gemini-1.5-flash' });
-    const resultText = typeof response === 'string' ? response : response?.message?.content || response?.toString();
-
-    if (!resultText) return null;
-    return JSON.parse(cleanJson(resultText));
+    if (response.text) {
+      return JSON.parse(response.text);
+    }
+    return null;
 
   } catch (error) {
-    console.error("Puter AI translation error:", error);
+    console.error("Gemini Translation Error:", error);
     return null;
   }
 };
 
 export const generateQuizQuestions = async (context: string, objective: string): Promise<QuizQuestion[]> => {
-  if (typeof puter === 'undefined') return [];
-
   try {
-    // Construction du prompt combiné (System + User instruction)
     const prompt = `
-    INSTRUCTION SYSTÈME :
-    Tu es un professeur de Mandarin expert. Ton but est de générer un quiz de 5 questions à partir du texte fourni par l'utilisateur. Si le texte n'a aucun rapport avec le chinois, adapte-le quand même pour créer des exercices de mandarin (traduction, tons, pinyin ou grammaire). Réponds uniquement au format JSON pour que je puisse parser les questions facilement.
-
-    DÉTAILS DE LA DEMANDE :
-    - Contexte / Texte de base : "${context}"
-    - Objectif pédagogique : "${objective}"
-
-    FORMAT DE RÉPONSE ATTENDU (JSON Array strict) :
-    [
-      {
-        "question": "La question en français ou mandarin",
-        "options": ["Choix A", "Choix B", "Choix C", "Choix D"],
-        "correctAnswer": "La bonne réponse (doit correspondre exactement à l'une des options)",
-        "explanation": "Explication pédagogique en français sur pourquoi c'est la bonne réponse."
-      }
-    ]
-    
-    IMPORTANT : Ne mets aucun texte avant ou après le JSON.
+      Tu es un professeur de Mandarin expert. Ton but est de générer un quiz de 5 questions à partir du texte fourni par l'utilisateur.
+      
+      Contexte : "${context}"
+      Objectif pédagogique : "${objective}"
+      
+      Si le texte n'a aucun rapport avec le chinois, adapte-le pour créer des exercices de mandarin (traduction, vocabulaire, grammaire).
+      Assure-toi que les options incorrectes sont plausibles.
     `;
 
-    const response = await puter.ai.chat(prompt, { model: 'gemini-1.5-flash' });
-    
-    const resultText = typeof response === 'string' ? response : response?.message?.content || response?.toString();
+    const response = await ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              question: { type: Type.STRING, description: "La question en français ou mandarin" },
+              options: { 
+                type: Type.ARRAY, 
+                items: { type: Type.STRING },
+                description: "4 options de réponse"
+              },
+              correctAnswer: { type: Type.STRING, description: "La bonne réponse exacte" },
+              explanation: { type: Type.STRING, description: "Explication pédagogique brève" }
+            },
+            required: ["question", "options", "correctAnswer", "explanation"]
+          }
+        }
+      }
+    });
 
-    if (!resultText) return [];
-    
-    const questions = JSON.parse(cleanJson(resultText));
-    
-    // Ajout d'IDs uniques
+    if (!response.text) return [];
+
+    const questions = JSON.parse(response.text);
+
+    // Ajout d'IDs uniques et validation basique
     return questions.map((q: any, index: number) => ({
       ...q,
-      id: `ai_${Date.now()}_${index}`
+      id: `gemini_${Date.now()}_${index}`,
+      // Sécurité pour s'assurer qu'il y a bien 4 options
+      options: q.options.length >= 2 ? q.options : ["Oui", "Non", "Peut-être", "Je ne sais pas"] 
     }));
 
   } catch (e) {
-    console.error("Puter AI Quiz gen error", e);
+    console.error("Gemini Quiz Generation Error", e);
     return [];
   }
-}
+};

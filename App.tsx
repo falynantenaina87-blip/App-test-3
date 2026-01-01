@@ -17,54 +17,35 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
   
-  // États pour la configuration manuelle en cas d'erreur
   const [manualUrl, setManualUrl] = useState('');
   const [manualKey, setManualKey] = useState('');
 
   useEffect(() => {
     const initApp = async () => {
       try {
-        // Ajout d'un timeout de 5 secondes pour éviter le chargement infini
         const timeoutPromise = new Promise((_, reject) => 
           setTimeout(() => reject(new Error("Délai d'attente dépassé (Timeout)")), 5000)
         );
-
         const sessionCheckPromise = db.getCurrentUser();
-        
-        // On attend soit la réponse de Supabase, soit le timeout
         const u = await Promise.race([sessionCheckPromise, timeoutPromise]) as User | null;
-        
         setUser(u);
       } catch (err: any) {
-        console.error("Initialization error:", err);
-        // On affiche une erreur explicite si la connexion échoue
-        setInitError("Impossible de connecter à Supabase. Les clés API semblent manquantes ou incorrectes.");
+        setInitError("Impossible de connecter à Supabase.");
       } finally {
         setIsLoading(false);
       }
     };
 
     initApp();
-
-    // Listen for auth changes (Login/Logout anywhere)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN') {
-         // On recharge le profil complet lors du sign-in
-         try {
-           const u = await db.getCurrentUser();
-           setUser(u);
-         } catch(e) { console.error(e); }
-      } else if (event === 'SIGNED_OUT') {
-         setUser(null);
-      }
+         try { const u = await db.getCurrentUser(); setUser(u); } catch(e) { console.error(e); }
+      } else if (event === 'SIGNED_OUT') { setUser(null); }
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleLogout = () => {
-    db.logout();
-  };
+  const handleLogout = () => db.logout();
 
   const saveConfig = () => {
     if (manualUrl && manualKey) {
@@ -76,73 +57,36 @@ const App: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="h-screen bg-mandarin-black flex flex-col items-center justify-center text-white gap-4">
-        <div className="w-8 h-8 border-4 border-mandarin-blue border-t-transparent rounded-full animate-spin"></div>
-        <p className="animate-pulse text-sm">Connexion au serveur...</p>
+      <div className="h-screen bg-mandarin-black flex flex-col items-center justify-center text-white gap-6 relative z-20">
+        <div className="relative">
+             <div className="w-16 h-16 border-4 border-white/10 rounded-full"></div>
+             <div className="w-16 h-16 border-4 border-mandarin-blue border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
+        </div>
+        <p className="animate-pulse text-xs tracking-[0.3em] font-bold text-mandarin-blue">CONNEXION...</p>
       </div>
     );
   }
 
   if (initError) {
     return (
-      <div className="h-screen bg-mandarin-black flex flex-col items-center justify-center text-mandarin-red p-6 text-center overflow-auto">
-        <AlertTriangle size={48} className="mb-4" />
-        <h2 className="text-xl font-bold mb-2">Erreur de Configuration</h2>
-        <p className="text-gray-400 max-w-md text-sm mb-6">{initError}</p>
-        
-        <div className="bg-mandarin-surface border border-mandarin-border p-6 rounded-xl w-full max-w-md text-left">
-            <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                <Settings size={18} />
-                Configuration Manuelle
+      <div className="h-screen bg-mandarin-black flex flex-col items-center justify-center text-mandarin-red p-6 text-center overflow-auto relative z-20">
+        <AlertTriangle size={64} className="mb-6 animate-bounce-slight" />
+        <h2 className="text-2xl font-bold mb-2 text-white">Erreur de Configuration</h2>
+        <div className="bg-mandarin-surface border border-mandarin-border p-8 rounded-2xl w-full max-w-md text-left shadow-2xl">
+            <h3 className="text-white font-bold mb-6 flex items-center gap-2 text-lg">
+                <Settings size={20} /> Configuration Manuelle
             </h3>
-            <p className="text-xs text-gray-500 mb-4">
-                Si vous n'avez pas accès aux variables d'environnement (ex: Vercel), entrez vos clés Supabase ici. Elles seront sauvegardées dans ce navigateur.
-            </p>
-            
-            <div className="space-y-3">
-                <div>
-                    <label className="text-xs text-gray-400 block mb-1">Project URL</label>
-                    <input 
-                        type="text" 
-                        value={manualUrl}
-                        onChange={(e) => setManualUrl(e.target.value)}
-                        placeholder="https://your-project.supabase.co"
-                        className="w-full bg-black border border-mandarin-border rounded p-2 text-white text-sm"
-                    />
-                </div>
-                <div>
-                    <label className="text-xs text-gray-400 block mb-1">Anon Key (Public)</label>
-                    <input 
-                        type="text" 
-                        value={manualKey}
-                        onChange={(e) => setManualKey(e.target.value)}
-                        placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                        className="w-full bg-black border border-mandarin-border rounded p-2 text-white text-sm"
-                    />
-                </div>
-                <button 
-                    onClick={saveConfig}
-                    disabled={!manualUrl || !manualKey}
-                    className="w-full bg-mandarin-blue text-white py-2 rounded hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm mt-2"
-                >
-                    Sauvegarder et Reconnecter
-                </button>
+            <div className="space-y-4">
+                <input type="text" value={manualUrl} onChange={(e) => setManualUrl(e.target.value)} placeholder="Project URL" className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white text-sm focus:border-mandarin-blue outline-none" />
+                <input type="text" value={manualKey} onChange={(e) => setManualKey(e.target.value)} placeholder="Anon Key" className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white text-sm focus:border-mandarin-blue outline-none" />
+                <button onClick={saveConfig} disabled={!manualUrl || !manualKey} className="w-full bg-mandarin-blue text-white py-3 rounded-xl hover:shadow-glow-blue transition font-bold text-sm mt-2">Sauvegarder</button>
             </div>
         </div>
-
-        <button 
-          onClick={() => window.location.reload()}
-          className="mt-8 text-gray-500 underline text-sm hover:text-white"
-        >
-          Réessayer sans changer la config
-        </button>
       </div>
     );
   }
 
-  if (!user) {
-    return <Auth onLogin={setUser} />;
-  }
+  if (!user) return <Auth onLogin={setUser} />;
 
   const renderContent = () => {
     switch (currentView) {
@@ -150,10 +94,10 @@ const App: React.FC = () => {
       case 'ANNOUNCEMENTS': return <Announcements currentUser={user} />;
       case 'QUIZ': return <Quiz currentUser={user} />;
       case 'DASHBOARD': return (
-        <div className="h-full flex flex-col items-center justify-center text-gray-500 p-8 text-center">
-            <BarChart2 size={64} className="mb-4 text-gray-700"/>
-            <h2 className="text-xl text-white mb-2">Statistiques (Bientôt)</h2>
-            <p>Le module de suivi de progression sera disponible après le premier partiel.</p>
+        <div className="h-full flex flex-col items-center justify-center text-gray-500 p-8 text-center animate-fade-in">
+            <BarChart2 size={80} className="mb-6 text-gray-700 opacity-50"/>
+            <h2 className="text-2xl text-white mb-2 font-serif">Statistiques</h2>
+            <p className="text-gray-400">Le module de suivi sera disponible bientôt.</p>
         </div>
       );
       default: return <Chat currentUser={user} />;
@@ -162,45 +106,60 @@ const App: React.FC = () => {
 
   return (
     <HashRouter>
-      <div className="flex flex-col h-screen bg-mandarin-black overflow-hidden font-sans">
+      <div className="flex flex-col h-screen overflow-hidden font-sans relative bg-mandarin-black">
         
-        {/* Main Content Area */}
-        <div className="flex-1 overflow-hidden relative">
+        {/* Background Gradients */}
+        <div className="fixed top-[-20%] left-[-10%] w-[70vw] h-[70vw] bg-blue-600/5 rounded-full blur-[150px] pointer-events-none animate-float"></div>
+        <div className="fixed bottom-[-20%] right-[-10%] w-[70vw] h-[70vw] bg-red-600/5 rounded-full blur-[150px] pointer-events-none animate-float" style={{animationDelay: '2s'}}></div>
+        
+        {/* Main Content */}
+        <div className="flex-1 overflow-hidden relative z-10">
           {renderContent()}
         </div>
 
-        {/* Bottom Navigation Bar */}
-        <nav className="h-16 bg-mandarin-surface border-t border-mandarin-border flex justify-around items-center px-2 z-50 shadow-[0_-5px_20px_rgba(0,0,0,0.5)]">
-          <NavButton 
-            active={currentView === 'CHAT'} 
-            onClick={() => setCurrentView('CHAT')} 
-            icon={<MessageSquare size={20} />} 
-            label="Chat"
-            activeColor="text-mandarin-blue"
-          />
-          <NavButton 
-            active={currentView === 'ANNOUNCEMENTS'} 
-            onClick={() => setCurrentView('ANNOUNCEMENTS')} 
-            icon={<Bell size={20} />} 
-            label="Infos"
-            activeColor="text-mandarin-red"
-          />
-          <NavButton 
-            active={currentView === 'QUIZ'} 
-            onClick={() => setCurrentView('QUIZ')} 
-            icon={<BookOpen size={20} />} 
-            label="Quiz"
-            activeColor="text-mandarin-yellow"
-          />
-          <div className="w-[1px] h-8 bg-gray-800 mx-1"></div>
-          <button 
-            onClick={handleLogout}
-            className="flex flex-col items-center justify-center p-2 text-gray-500 hover:text-white transition-colors"
-          >
-            <LogOut size={20} />
-            <span className="text-[10px] mt-1 font-medium">Sortir</span>
-          </button>
-        </nav>
+        {/* Floating Navigation Island */}
+        <div className="fixed bottom-6 left-0 right-0 flex justify-center z-50 pointer-events-none">
+            <nav className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-full px-6 py-3 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.8)] pointer-events-auto flex items-center gap-2 md:gap-6 transform transition-all hover:scale-[1.02]">
+            
+            <NavButton 
+                active={currentView === 'CHAT'} 
+                onClick={() => setCurrentView('CHAT')} 
+                icon={<MessageSquare size={26} strokeWidth={currentView === 'CHAT' ? 2.5 : 2} />} 
+                label="Chat"
+                activeColor="text-mandarin-blue"
+            />
+            
+            <div className="w-[1px] h-6 bg-white/10 mx-1"></div>
+
+            <NavButton 
+                active={currentView === 'ANNOUNCEMENTS'} 
+                onClick={() => setCurrentView('ANNOUNCEMENTS')} 
+                icon={<Bell size={26} strokeWidth={currentView === 'ANNOUNCEMENTS' ? 2.5 : 2} />} 
+                label="Infos"
+                activeColor="text-mandarin-red"
+            />
+            
+            <div className="w-[1px] h-6 bg-white/10 mx-1"></div>
+
+            <NavButton 
+                active={currentView === 'QUIZ'} 
+                onClick={() => setCurrentView('QUIZ')} 
+                icon={<BookOpen size={26} strokeWidth={currentView === 'QUIZ' ? 2.5 : 2} />} 
+                label="Quiz"
+                activeColor="text-mandarin-yellow"
+            />
+            
+            <div className="w-[1px] h-6 bg-white/10 mx-1"></div>
+            
+            <button 
+                onClick={handleLogout}
+                className="p-3 text-gray-500 hover:text-white hover:bg-white/10 rounded-full transition-all group active:scale-90"
+                title="Déconnexion"
+            >
+                <LogOut size={24} className="group-hover:rotate-12 transition-transform"/>
+            </button>
+            </nav>
+        </div>
       </div>
     </HashRouter>
   );
@@ -217,11 +176,13 @@ interface NavButtonProps {
 const NavButton: React.FC<NavButtonProps> = ({ active, onClick, icon, label, activeColor }) => (
   <button 
     onClick={onClick}
-    className={`flex flex-col items-center justify-center p-2 w-16 transition-all duration-300 ${active ? `${activeColor} scale-110` : 'text-gray-500 hover:text-gray-300'}`}
+    className={`relative group flex items-center justify-center p-3 rounded-full transition-all duration-300 ${active ? `${activeColor} bg-white/10 shadow-[inset_0_0_20px_rgba(255,255,255,0.05)]` : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
   >
-    {icon}
-    <span className="text-[10px] mt-1 font-medium">{label}</span>
-    {active && <span className={`w-1 h-1 rounded-full mt-1 bg-current`}></span>}
+    <div className={`transition-transform duration-300 ${active ? 'scale-110' : 'group-hover:scale-110'}`}>
+      {icon}
+    </div>
+    {/* Active Glow Dot */}
+    {active && <span className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-current rounded-full shadow-[0_0_10px_currentColor]"></span>}
   </button>
 );
 

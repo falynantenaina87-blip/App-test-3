@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/databaseService';
 import { generateQuizQuestions } from '../services/geminiService';
-import { QuizQuestion, User, UserRole, QuizResult } from '../types';
-import { CheckCircle, XCircle, ArrowRight, Award, BrainCircuit, Lock, Sparkles, SlidersHorizontal, RefreshCw } from 'lucide-react';
+import { QuizQuestion, User, QuizResult } from '../types';
+import { CheckCircle, XCircle, ArrowRight, Award, BrainCircuit, Sparkles, SlidersHorizontal, RefreshCw, Loader2 } from 'lucide-react';
 
-// Fallback questions if AI fails or manual default
 const DEFAULT_QUESTIONS: QuizQuestion[] = [
   {
     id: 'q1',
@@ -26,17 +25,14 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
   const [isAnswered, setIsAnswered] = useState(false);
   const [score, setScore] = useState(0);
   
-  // States for flow
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [previousResult, setPreviousResult] = useState<QuizResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   
-  // Inputs pour l'IA
   const [quizContext, setQuizContext] = useState('');
   const [quizObjective, setQuizObjective] = useState('Vocabulaire');
 
   useEffect(() => {
-    // 1. Check if user already took the quiz
     const checkStatus = async () => {
         const result = await db.checkQuizSubmission(currentUser.id);
         if (result) {
@@ -47,28 +43,25 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
     checkStatus();
   }, [currentUser.id]);
 
-  // Admin function to generate new questions
   const handleGenerateAI = async () => {
     if (!quizContext.trim()) {
-        alert("Veuillez entrer un contexte (mot, phrase, texte) pour générer le quiz.");
+        alert("Veuillez entrer un thème.");
         return;
     }
 
     setIsGenerating(true);
-    // Appel avec les deux paramètres : contexte et objectif
     const newQuestions = await generateQuizQuestions(quizContext, quizObjective);
     
     if (newQuestions.length > 0) {
         setQuestions(newQuestions);
-        // Reset quiz state for practice
         setHasSubmitted(false); 
         setScore(0);
         setCurrentQuestionIndex(0);
         setIsAnswered(false);
         setSelectedOption(null);
-        setPreviousResult(null); // Important: clear previous DB result context
+        setPreviousResult(null);
     } else {
-        alert("L'IA n'a pas pu générer le quiz. Veuillez réessayer.");
+        alert("Erreur de génération. Vérifiez votre clé API.");
     }
     setIsGenerating(false);
   };
@@ -95,52 +88,50 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
 
   const finishQuiz = async () => {
     setHasSubmitted(true);
-    // Only save to DB if it's the "official" quiz (checking against default ID or logic)
-    // For now we save everything, but in a real app we might distinguish "Practice" vs "Exam"
-    // Just saving is fine, it updates the "last score" effectively if we allowed multiple inserts,
-    // but db.submitQuizResult logic in previous file wasn't checked for duplicates/updates.
-    // Assuming simple flow:
     try {
-        // We use a try catch because if unique constraint exists, it might fail, 
-        // but for practice mode we might not care about saving to DB if already there.
         await db.submitQuizResult(currentUser.id, score, questions.length);
-    } catch(e) {
-        console.log("Score update skipped or failed", e);
-    }
+    } catch(e) { console.log(e); }
   };
 
   if (hasSubmitted) {
     const displayScore = previousResult ? previousResult.score : score;
     const displayTotal = previousResult ? previousResult.total : questions.length;
+    const percent = Math.round((displayScore / displayTotal) * 100);
 
     return (
-      <div className="h-full flex flex-col items-center justify-center p-6 bg-mandarin-black text-center relative">
-        <Award size={64} className="text-mandarin-yellow mb-4" />
-        <h2 className="text-3xl font-bold text-white mb-2 academia-serif">Quiz Terminé</h2>
-        <p className="text-gray-400 mb-6">
-            {previousResult ? "Résultat enregistré." : "Bien joué !"}
-        </p>
-        
-        <div className="bg-mandarin-surface border border-mandarin-green/30 p-6 rounded-xl w-full max-w-sm mb-8">
-          <span className="text-5xl font-bold text-mandarin-green">{displayScore}</span>
-          <span className="text-2xl text-gray-500"> / {displayTotal}</span>
-        </div>
+      <div className="h-full flex flex-col items-center justify-center p-6 text-center animate-fade-in relative z-10">
+        <div className="glass-panel p-10 rounded-3xl border border-white/10 shadow-2xl max-w-md w-full">
+            <Award size={64} className={`mx-auto mb-6 ${percent > 50 ? 'text-mandarin-yellow' : 'text-gray-500'}`} />
+            
+            <h2 className="text-3xl font-bold text-white mb-2 academia-serif">
+                {percent === 100 ? "Parfait !" : percent >= 50 ? "Bien joué" : "Continuez vos efforts"}
+            </h2>
+            <p className="text-gray-400 mb-8 text-sm uppercase tracking-widest">Résumé de la session</p>
+            
+            <div className="relative w-40 h-40 mx-auto mb-8 flex items-center justify-center">
+                <svg className="w-full h-full transform -rotate-90">
+                    <circle cx="80" cy="80" r="70" stroke="#333" strokeWidth="8" fill="transparent" />
+                    <circle cx="80" cy="80" r="70" stroke={percent > 50 ? "#EAB308" : "#3B82F6"} strokeWidth="8" fill="transparent" 
+                        strokeDasharray={440} strokeDashoffset={440 - (440 * percent) / 100} className="transition-all duration-1000 ease-out" />
+                </svg>
+                <div className="absolute text-4xl font-bold text-white">{displayScore}/{displayTotal}</div>
+            </div>
 
-        {/* Bouton accessible à TOUS pour relancer un quiz IA */}
-        <button 
-            onClick={() => {
-                setHasSubmitted(false);
-                setPreviousResult(null);
-                setScore(0);
-                setCurrentQuestionIndex(0);
-                setIsAnswered(false);
-                setSelectedOption(null);
-            }}
-            className="flex items-center gap-2 bg-mandarin-blue text-white px-6 py-3 rounded-full font-bold hover:bg-blue-600 transition shadow-lg shadow-blue-500/20"
-        >
-            <RefreshCw size={20} />
-            <span>Générer un nouveau Quiz</span>
-        </button>
+            <button 
+                onClick={() => {
+                    setHasSubmitted(false);
+                    setPreviousResult(null);
+                    setScore(0);
+                    setCurrentQuestionIndex(0);
+                    setIsAnswered(false);
+                    setSelectedOption(null);
+                }}
+                className="w-full flex items-center justify-center gap-2 bg-mandarin-blue hover:bg-blue-600 text-white py-3 rounded-xl font-medium transition-all shadow-lg shadow-blue-500/20"
+            >
+                <RefreshCw size={18} />
+                <span>Nouvel Entraînement</span>
+            </button>
+        </div>
       </div>
     );
   }
@@ -148,82 +139,69 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
   const question = questions[currentQuestionIndex];
 
   return (
-    <div className="h-full bg-mandarin-black p-4 flex flex-col max-w-2xl mx-auto">
-      {/* Generator Toolbar - Available to ALL users now */}
-      <div className="mb-6 p-4 bg-mandarin-surface border border-mandarin-blue/30 rounded-xl shadow-lg">
-          <div className="flex items-center gap-2 mb-3 text-mandarin-blue text-sm font-bold uppercase tracking-wider">
-              <BrainCircuit size={16} />
-              <span>Générateur d'Entraînement IA</span>
+    <div className="h-full p-4 flex flex-col max-w-3xl mx-auto relative z-10">
+      
+      {/* AI Generator Panel */}
+      <div className="glass-panel rounded-xl p-4 mb-6 transition-all duration-300 hover:border-mandarin-blue/30">
+          <div className="flex items-center gap-2 mb-3 text-mandarin-blue text-xs font-bold uppercase tracking-widest">
+              <BrainCircuit size={14} />
+              <span>Générateur Gemini</span>
           </div>
           
-          <div className="flex flex-col gap-3">
-              {/* Ligne 1: Inputs */}
-              <div className="flex flex-col md:flex-row gap-2">
-                  <input 
-                      type="text"
-                      value={quizContext}
-                      onChange={(e) => setQuizContext(e.target.value)}
-                      placeholder="Sujet (ex: Famille, Chiffres, Restaurant...)"
-                      className="flex-[2] bg-black border border-mandarin-border rounded px-3 py-2 text-white focus:border-mandarin-blue outline-none text-sm placeholder-gray-600"
-                  />
-                  
-                  <div className="flex-1 relative">
-                      <SlidersHorizontal size={14} className="absolute left-3 top-3 text-gray-500 pointer-events-none"/>
-                      <select 
-                          value={quizObjective} 
-                          onChange={(e) => setQuizObjective(e.target.value)}
-                          className="w-full bg-black border border-mandarin-border rounded px-3 py-2 pl-9 text-white focus:border-mandarin-blue outline-none text-sm appearance-none cursor-pointer hover:bg-gray-900 transition"
-                      >
-                          <option value="Vocabulaire">Vocabulaire</option>
-                          <option value="Grammaire">Grammaire</option>
-                          <option value="Compréhension">Compréhension</option>
-                          <option value="Traduction">Traduction</option>
-                          <option value="Culture">Culture</option>
-                      </select>
-                  </div>
+          <div className="flex flex-col md:flex-row gap-3">
+              <input 
+                  type="text"
+                  value={quizContext}
+                  onChange={(e) => setQuizContext(e.target.value)}
+                  placeholder="Thème (ex: La nourriture, HSK 1, Voyage...)"
+                  className="flex-[2] bg-black/50 border border-white/10 rounded-lg px-4 py-2 text-white focus:border-mandarin-blue outline-none text-sm placeholder-gray-600 transition-colors"
+              />
+              
+              <div className="flex-1 relative">
+                  <select 
+                      value={quizObjective} 
+                      onChange={(e) => setQuizObjective(e.target.value)}
+                      className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2 text-white focus:border-mandarin-blue outline-none text-sm appearance-none cursor-pointer"
+                  >
+                      <option value="Vocabulaire">Vocabulaire</option>
+                      <option value="Grammaire">Grammaire</option>
+                      <option value="Traduction">Traduction</option>
+                      <option value="Culture">Culture</option>
+                  </select>
+                  <SlidersHorizontal size={14} className="absolute right-3 top-2.5 text-gray-500 pointer-events-none"/>
               </div>
 
-              {/* Ligne 2: Bouton Action */}
               <button 
                   onClick={handleGenerateAI}
                   disabled={isGenerating || !quizContext.trim()}
-                  className="w-full flex items-center justify-center gap-2 bg-mandarin-blue text-white px-4 py-2 rounded hover:bg-blue-600 text-sm transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-mandarin-blue hover:bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium transition-all shadow-lg shadow-blue-500/10 disabled:opacity-50 flex items-center justify-center gap-2 min-w-[140px]"
               >
-                  {isGenerating ? (
-                      <span className="animate-pulse flex items-center gap-2">
-                          <Sparkles size={16} className="animate-spin" />
-                          Création des exercices...
-                      </span>
-                  ) : (
-                      <>
-                          <Sparkles size={16} />
-                          <span>Générer les Questions</span>
-                      </>
-                  )}
+                  {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                  <span>Générer</span>
               </button>
           </div>
       </div>
 
-      {/* Progress */}
-      <div className="mb-6 mt-2">
-        <div className="flex justify-between text-xs text-gray-400 mb-2">
-          <span>Question {currentQuestionIndex + 1} / {questions.length}</span>
-          <span>Score: {score}</span>
+      {/* Progress Bar */}
+      <div className="mb-4 px-1">
+        <div className="flex justify-between text-xs font-medium text-gray-400 mb-2">
+          <span>PROGRESSION</span>
+          <span>{currentQuestionIndex + 1} / {questions.length}</span>
         </div>
-        <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
           <div 
-            className="h-full bg-mandarin-yellow transition-all duration-500 ease-out"
+            className="h-full bg-gradient-to-r from-mandarin-blue to-mandarin-green transition-all duration-500 ease-out"
             style={{ width: `${((currentQuestionIndex + 1) / questions.length) * 100}%` }}
           />
         </div>
       </div>
 
-      {/* Card */}
-      <div className="flex-1 flex flex-col justify-center">
-        <div className="bg-mandarin-surface border border-mandarin-border rounded-2xl p-6 md:p-10 shadow-2xl relative overflow-hidden">
+      {/* Question Card */}
+      <div className="flex-1 flex flex-col justify-center animate-slide-up">
+        <div className="glass-panel border-t border-white/10 rounded-2xl p-6 md:p-10 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] relative overflow-hidden">
           
-          <div className="text-center mb-8">
-            <h1 className="text-2xl md:text-3xl font-bold text-white mb-4 font-serif leading-tight">
+          <div className="mb-8">
+            <h1 className="text-2xl md:text-3xl font-bold text-white font-serif leading-snug">
                 {question.question}
             </h1>
           </div>
@@ -233,11 +211,13 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
               const isSelected = selectedOption === option;
               const isCorrect = option === question.correctAnswer;
               
-              let btnStyle = "bg-gray-900 border-gray-700 text-gray-300 hover:bg-gray-800";
+              let btnStyle = "bg-white/5 border-white/5 text-gray-300 hover:bg-white/10 hover:border-white/20";
               if (isAnswered) {
-                if (isCorrect) btnStyle = "bg-mandarin-green/20 border-mandarin-green text-mandarin-green";
+                if (isCorrect) btnStyle = "bg-mandarin-green/20 border-mandarin-green text-mandarin-green ring-1 ring-mandarin-green";
                 else if (isSelected) btnStyle = "bg-mandarin-red/20 border-mandarin-red text-mandarin-red";
-                else btnStyle = "opacity-50 border-gray-800 bg-black";
+                else btnStyle = "opacity-40 bg-black border-transparent";
+              } else if (isSelected) {
+                  btnStyle = "bg-mandarin-blue/20 border-mandarin-blue text-white";
               }
 
               return (
@@ -245,34 +225,39 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
                   key={idx}
                   onClick={() => handleOptionClick(option)}
                   disabled={isAnswered}
-                  className={`p-4 rounded-lg border text-left transition-all font-medium ${btnStyle}`}
+                  className={`p-4 rounded-xl border text-left transition-all duration-200 font-medium flex justify-between items-center group ${btnStyle}`}
                 >
-                  {option}
-                  {isAnswered && isCorrect && <CheckCircle className="float-right" size={20}/>}
-                  {isAnswered && isSelected && !isCorrect && <XCircle className="float-right" size={20}/>}
+                  <span>{option}</span>
+                  {isAnswered && isCorrect && <CheckCircle size={20} className="text-mandarin-green"/>}
+                  {isAnswered && isSelected && !isCorrect && <XCircle size={20} className="text-mandarin-red"/>}
                 </button>
               );
             })}
           </div>
 
           {isAnswered && (
-            <div className="mt-6 p-4 bg-mandarin-blue/10 border-l-4 border-mandarin-blue rounded text-sm text-gray-200 animate-fade-in">
-              <p className="font-bold text-mandarin-blue mb-1">Explication :</p>
-              {question.explanation}
+            <div className="mt-6 p-5 bg-mandarin-surfaceHighlight rounded-xl border-l-4 border-mandarin-yellow animate-fade-in shadow-inner">
+              <div className="flex items-center gap-2 mb-2 text-mandarin-yellow font-bold text-sm uppercase">
+                  <BrainCircuit size={16} />
+                  <span>Analyse</span>
+              </div>
+              <p className="text-gray-300 text-sm leading-relaxed">
+                  {question.explanation}
+              </p>
             </div>
           )}
 
         </div>
       </div>
 
-      {/* Action Bar */}
-      <div className="h-20 flex items-center justify-end">
+      {/* Footer Actions */}
+      <div className="h-20 flex items-center justify-end mt-4">
         {isAnswered && (
           <button
             onClick={handleNext}
-            className="flex items-center gap-2 bg-white text-black px-6 py-3 rounded-full font-bold hover:bg-gray-200 transition shadow-lg shadow-white/10"
+            className="flex items-center gap-3 bg-white text-black px-8 py-3 rounded-full font-bold hover:scale-105 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)]"
           >
-            {currentQuestionIndex === questions.length - 1 ? 'Voir le résultat' : 'Suivant'}
+            <span>{currentQuestionIndex === questions.length - 1 ? 'Terminer' : 'Suivant'}</span>
             <ArrowRight size={20} />
           </button>
         )}
