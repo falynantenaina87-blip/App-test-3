@@ -1,7 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Fonction utilitaire pour récupérer les variables d'environnement de manière sécurisée
-// Compatible avec Vite (import.meta.env) et les environnements classiques (process.env)
 const getEnv = (key: string) => {
   try {
     // @ts-ignore
@@ -24,8 +23,17 @@ const getEnv = (key: string) => {
   return '';
 };
 
-const supabaseUrl = getEnv('VITE_SUPABASE_URL');
-const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY');
+const getLocal = (key: string) => {
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    return null;
+  }
+};
+
+// Priorité : LocalStorage (config manuelle) > Env Vars (Vite/Process) > Placeholder
+const supabaseUrl = getLocal('VITE_SUPABASE_URL') || getEnv('VITE_SUPABASE_URL');
+const supabaseAnonKey = getLocal('VITE_SUPABASE_ANON_KEY') || getEnv('VITE_SUPABASE_ANON_KEY');
 
 // Si les clés sont manquantes, on utilise des valeurs fictives pour ne pas bloquer le chargement du script.
 // Les appels API échoueront gracieusement (ou via timeout) au lieu de causer une page blanche.

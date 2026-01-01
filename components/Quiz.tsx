@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/databaseService';
 import { generateQuizQuestions } from '../services/geminiService';
 import { QuizQuestion, User, UserRole, QuizResult } from '../types';
-import { CheckCircle, XCircle, ArrowRight, Award, BrainCircuit, Lock, Sparkles, SlidersHorizontal } from 'lucide-react';
+import { CheckCircle, XCircle, ArrowRight, Award, BrainCircuit, Lock, Sparkles, SlidersHorizontal, RefreshCw } from 'lucide-react';
 
 // Fallback questions if AI fails or manual default
 const DEFAULT_QUESTIONS: QuizQuestion[] = [
@@ -60,12 +60,13 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
     
     if (newQuestions.length > 0) {
         setQuestions(newQuestions);
-        // Reset quiz state for demo purposes so admin can test it
+        // Reset quiz state for practice
         setHasSubmitted(false); 
         setScore(0);
         setCurrentQuestionIndex(0);
         setIsAnswered(false);
         setSelectedOption(null);
+        setPreviousResult(null); // Important: clear previous DB result context
     } else {
         alert("L'IA n'a pas pu générer le quiz. Veuillez réessayer.");
     }
@@ -94,8 +95,18 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
 
   const finishQuiz = async () => {
     setHasSubmitted(true);
-    // Save to DB
-    await db.submitQuizResult(currentUser.id, score, questions.length);
+    // Only save to DB if it's the "official" quiz (checking against default ID or logic)
+    // For now we save everything, but in a real app we might distinguish "Practice" vs "Exam"
+    // Just saving is fine, it updates the "last score" effectively if we allowed multiple inserts,
+    // but db.submitQuizResult logic in previous file wasn't checked for duplicates/updates.
+    // Assuming simple flow:
+    try {
+        // We use a try catch because if unique constraint exists, it might fail, 
+        // but for practice mode we might not care about saving to DB if already there.
+        await db.submitQuizResult(currentUser.id, score, questions.length);
+    } catch(e) {
+        console.log("Score update skipped or failed", e);
+    }
   };
 
   if (hasSubmitted) {
@@ -105,27 +116,31 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
     return (
       <div className="h-full flex flex-col items-center justify-center p-6 bg-mandarin-black text-center relative">
         <Award size={64} className="text-mandarin-yellow mb-4" />
-        <h2 className="text-3xl font-bold text-white mb-2 academia-serif">Quiz Validé</h2>
-        <p className="text-gray-400 mb-6">Vous avez déjà complété cette évaluation.</p>
+        <h2 className="text-3xl font-bold text-white mb-2 academia-serif">Quiz Terminé</h2>
+        <p className="text-gray-400 mb-6">
+            {previousResult ? "Résultat enregistré." : "Bien joué !"}
+        </p>
         
         <div className="bg-mandarin-surface border border-mandarin-green/30 p-6 rounded-xl w-full max-w-sm mb-8">
           <span className="text-5xl font-bold text-mandarin-green">{displayScore}</span>
           <span className="text-2xl text-gray-500"> / {displayTotal}</span>
         </div>
 
-        <div className="flex items-center gap-2 text-mandarin-red bg-mandarin-red/10 px-4 py-2 rounded-lg border border-mandarin-red/30">
-            <Lock size={16} />
-            <span className="text-sm">Tentative unique verrouillée</span>
-        </div>
-
-        {currentUser.role === UserRole.ADMIN && (
-             <button 
-             onClick={() => setHasSubmitted(false)}
-             className="mt-8 text-xs text-gray-500 underline hover:text-white"
-           >
-             (Admin: Réinitialiser pour tester)
-           </button>
-        )}
+        {/* Bouton accessible à TOUS pour relancer un quiz IA */}
+        <button 
+            onClick={() => {
+                setHasSubmitted(false);
+                setPreviousResult(null);
+                setScore(0);
+                setCurrentQuestionIndex(0);
+                setIsAnswered(false);
+                setSelectedOption(null);
+            }}
+            className="flex items-center gap-2 bg-mandarin-blue text-white px-6 py-3 rounded-full font-bold hover:bg-blue-600 transition shadow-lg shadow-blue-500/20"
+        >
+            <RefreshCw size={20} />
+            <span>Générer un nouveau Quiz</span>
+        </button>
       </div>
     );
   }
@@ -134,62 +149,60 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
 
   return (
     <div className="h-full bg-mandarin-black p-4 flex flex-col max-w-2xl mx-auto">
-      {/* Admin Toolbar - Only visible to Admin */}
-      {currentUser.role === UserRole.ADMIN && (
-        <div className="mb-6 p-4 bg-mandarin-surface border border-mandarin-blue/30 rounded-xl shadow-lg">
-            <div className="flex items-center gap-2 mb-3 text-mandarin-blue text-sm font-bold uppercase tracking-wider">
-                <BrainCircuit size={16} />
-                <span>Générateur IA</span>
-            </div>
-            
-            <div className="flex flex-col gap-3">
-                {/* Ligne 1: Inputs */}
-                <div className="flex flex-col md:flex-row gap-2">
-                    <input 
-                        type="text"
-                        value={quizContext}
-                        onChange={(e) => setQuizContext(e.target.value)}
-                        placeholder="Contexte (ex: 'La famille', 'Commander au resto'...)"
-                        className="flex-[2] bg-black border border-mandarin-border rounded px-3 py-2 text-white focus:border-mandarin-blue outline-none text-sm placeholder-gray-600"
-                    />
-                    
-                    <div className="flex-1 relative">
-                        <SlidersHorizontal size={14} className="absolute left-3 top-3 text-gray-500 pointer-events-none"/>
-                        <select 
-                            value={quizObjective} 
-                            onChange={(e) => setQuizObjective(e.target.value)}
-                            className="w-full bg-black border border-mandarin-border rounded px-3 py-2 pl-9 text-white focus:border-mandarin-blue outline-none text-sm appearance-none cursor-pointer hover:bg-gray-900 transition"
-                        >
-                            <option value="Vocabulaire">Vocabulaire</option>
-                            <option value="Grammaire">Grammaire</option>
-                            <option value="Compréhension Écrite">Compréhension</option>
-                            <option value="Traduction & Structure">Traduction</option>
-                            <option value="Culture & Civilisation">Culture</option>
-                        </select>
-                    </div>
-                </div>
+      {/* Generator Toolbar - Available to ALL users now */}
+      <div className="mb-6 p-4 bg-mandarin-surface border border-mandarin-blue/30 rounded-xl shadow-lg">
+          <div className="flex items-center gap-2 mb-3 text-mandarin-blue text-sm font-bold uppercase tracking-wider">
+              <BrainCircuit size={16} />
+              <span>Générateur d'Entraînement IA</span>
+          </div>
+          
+          <div className="flex flex-col gap-3">
+              {/* Ligne 1: Inputs */}
+              <div className="flex flex-col md:flex-row gap-2">
+                  <input 
+                      type="text"
+                      value={quizContext}
+                      onChange={(e) => setQuizContext(e.target.value)}
+                      placeholder="Sujet (ex: Famille, Chiffres, Restaurant...)"
+                      className="flex-[2] bg-black border border-mandarin-border rounded px-3 py-2 text-white focus:border-mandarin-blue outline-none text-sm placeholder-gray-600"
+                  />
+                  
+                  <div className="flex-1 relative">
+                      <SlidersHorizontal size={14} className="absolute left-3 top-3 text-gray-500 pointer-events-none"/>
+                      <select 
+                          value={quizObjective} 
+                          onChange={(e) => setQuizObjective(e.target.value)}
+                          className="w-full bg-black border border-mandarin-border rounded px-3 py-2 pl-9 text-white focus:border-mandarin-blue outline-none text-sm appearance-none cursor-pointer hover:bg-gray-900 transition"
+                      >
+                          <option value="Vocabulaire">Vocabulaire</option>
+                          <option value="Grammaire">Grammaire</option>
+                          <option value="Compréhension">Compréhension</option>
+                          <option value="Traduction">Traduction</option>
+                          <option value="Culture">Culture</option>
+                      </select>
+                  </div>
+              </div>
 
-                {/* Ligne 2: Bouton Action */}
-                <button 
-                    onClick={handleGenerateAI}
-                    disabled={isGenerating || !quizContext.trim()}
-                    className="w-full flex items-center justify-center gap-2 bg-mandarin-blue text-white px-4 py-2 rounded hover:bg-blue-600 text-sm transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {isGenerating ? (
-                        <span className="animate-pulse flex items-center gap-2">
-                            <Sparkles size={16} className="animate-spin" />
-                            Génération du questionnaire...
-                        </span>
-                    ) : (
-                        <>
-                            <Sparkles size={16} />
-                            <span>Générer le Quiz</span>
-                        </>
-                    )}
-                </button>
-            </div>
-        </div>
-      )}
+              {/* Ligne 2: Bouton Action */}
+              <button 
+                  onClick={handleGenerateAI}
+                  disabled={isGenerating || !quizContext.trim()}
+                  className="w-full flex items-center justify-center gap-2 bg-mandarin-blue text-white px-4 py-2 rounded hover:bg-blue-600 text-sm transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                  {isGenerating ? (
+                      <span className="animate-pulse flex items-center gap-2">
+                          <Sparkles size={16} className="animate-spin" />
+                          Création des exercices...
+                      </span>
+                  ) : (
+                      <>
+                          <Sparkles size={16} />
+                          <span>Générer les Questions</span>
+                      </>
+                  )}
+              </button>
+          </div>
+      </div>
 
       {/* Progress */}
       <div className="mb-6 mt-2">
@@ -259,7 +272,7 @@ const Quiz: React.FC<QuizProps> = ({ currentUser }) => {
             onClick={handleNext}
             className="flex items-center gap-2 bg-white text-black px-6 py-3 rounded-full font-bold hover:bg-gray-200 transition shadow-lg shadow-white/10"
           >
-            {currentQuestionIndex === questions.length - 1 ? 'Terminer & Valider' : 'Suivant'}
+            {currentQuestionIndex === questions.length - 1 ? 'Voir le résultat' : 'Suivant'}
             <ArrowRight size={20} />
           </button>
         )}

@@ -7,7 +7,7 @@ import Quiz from './components/Quiz';
 import { db } from './services/databaseService';
 import { supabase } from './services/supabaseClient';
 import { User } from './types';
-import { MessageSquare, Bell, BookOpen, LogOut, BarChart2, AlertTriangle } from 'lucide-react';
+import { MessageSquare, Bell, BookOpen, LogOut, BarChart2, AlertTriangle, Settings } from 'lucide-react';
 
 type View = 'CHAT' | 'ANNOUNCEMENTS' | 'QUIZ' | 'DASHBOARD';
 
@@ -16,6 +16,10 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('CHAT');
   const [isLoading, setIsLoading] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
+  
+  // États pour la configuration manuelle en cas d'erreur
+  const [manualUrl, setManualUrl] = useState('');
+  const [manualKey, setManualKey] = useState('');
 
   useEffect(() => {
     const initApp = async () => {
@@ -34,7 +38,7 @@ const App: React.FC = () => {
       } catch (err: any) {
         console.error("Initialization error:", err);
         // On affiche une erreur explicite si la connexion échoue
-        setInitError("Impossible de connecter à Supabase. Vérifiez votre connexion internet et les clés API.");
+        setInitError("Impossible de connecter à Supabase. Les clés API semblent manquantes ou incorrectes.");
       } finally {
         setIsLoading(false);
       }
@@ -62,6 +66,14 @@ const App: React.FC = () => {
     db.logout();
   };
 
+  const saveConfig = () => {
+    if (manualUrl && manualKey) {
+        localStorage.setItem('VITE_SUPABASE_URL', manualUrl);
+        localStorage.setItem('VITE_SUPABASE_ANON_KEY', manualKey);
+        window.location.reload();
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="h-screen bg-mandarin-black flex flex-col items-center justify-center text-white gap-4">
@@ -73,15 +85,56 @@ const App: React.FC = () => {
 
   if (initError) {
     return (
-      <div className="h-screen bg-mandarin-black flex flex-col items-center justify-center text-mandarin-red p-6 text-center">
+      <div className="h-screen bg-mandarin-black flex flex-col items-center justify-center text-mandarin-red p-6 text-center overflow-auto">
         <AlertTriangle size={48} className="mb-4" />
-        <h2 className="text-xl font-bold mb-2">Erreur de Connexion</h2>
-        <p className="text-gray-400 max-w-md">{initError}</p>
+        <h2 className="text-xl font-bold mb-2">Erreur de Configuration</h2>
+        <p className="text-gray-400 max-w-md text-sm mb-6">{initError}</p>
+        
+        <div className="bg-mandarin-surface border border-mandarin-border p-6 rounded-xl w-full max-w-md text-left">
+            <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+                <Settings size={18} />
+                Configuration Manuelle
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">
+                Si vous n'avez pas accès aux variables d'environnement (ex: Vercel), entrez vos clés Supabase ici. Elles seront sauvegardées dans ce navigateur.
+            </p>
+            
+            <div className="space-y-3">
+                <div>
+                    <label className="text-xs text-gray-400 block mb-1">Project URL</label>
+                    <input 
+                        type="text" 
+                        value={manualUrl}
+                        onChange={(e) => setManualUrl(e.target.value)}
+                        placeholder="https://your-project.supabase.co"
+                        className="w-full bg-black border border-mandarin-border rounded p-2 text-white text-sm"
+                    />
+                </div>
+                <div>
+                    <label className="text-xs text-gray-400 block mb-1">Anon Key (Public)</label>
+                    <input 
+                        type="text" 
+                        value={manualKey}
+                        onChange={(e) => setManualKey(e.target.value)}
+                        placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                        className="w-full bg-black border border-mandarin-border rounded p-2 text-white text-sm"
+                    />
+                </div>
+                <button 
+                    onClick={saveConfig}
+                    disabled={!manualUrl || !manualKey}
+                    className="w-full bg-mandarin-blue text-white py-2 rounded hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm mt-2"
+                >
+                    Sauvegarder et Reconnecter
+                </button>
+            </div>
+        </div>
+
         <button 
           onClick={() => window.location.reload()}
-          className="mt-6 bg-mandarin-surface border border-mandarin-border text-white px-4 py-2 rounded hover:bg-gray-800 transition text-sm"
+          className="mt-8 text-gray-500 underline text-sm hover:text-white"
         >
-          Réessayer
+          Réessayer sans changer la config
         </button>
       </div>
     );
