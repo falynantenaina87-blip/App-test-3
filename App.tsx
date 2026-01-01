@@ -9,7 +9,7 @@ import Schedule from './components/Schedule';
 import { db } from './services/databaseService';
 import { supabase } from './services/supabaseClient';
 import { User } from './types';
-import { MessageSquare, Bell, BookOpen, LogOut, Calendar, AlertTriangle, Settings } from 'lucide-react';
+import { MessageSquare, Bell, BookOpen, LogOut, Calendar, AlertTriangle, Settings, RefreshCw } from 'lucide-react';
 
 type View = 'CHAT' | 'ANNOUNCEMENTS' | 'QUIZ' | 'SCHEDULE';
 
@@ -22,22 +22,26 @@ const App: React.FC = () => {
   const [manualUrl, setManualUrl] = useState('');
   const [manualKey, setManualKey] = useState('');
 
-  useEffect(() => {
-    const initApp = async () => {
-      try {
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("Délai d'attente dépassé (Timeout)")), 5000)
-        );
-        const sessionCheckPromise = db.getCurrentUser();
-        const u = await Promise.race([sessionCheckPromise, timeoutPromise]) as User | null;
-        setUser(u);
-      } catch (err: any) {
-        setInitError("Impossible de connecter à Supabase.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const initApp = async () => {
+    setIsLoading(true);
+    setInitError(null);
+    try {
+      // Augmentation du timeout à 15s pour les "cold starts" de Supabase (Free Tier)
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Délai d'attente dépassé (Connexion lente)")), 15000)
+      );
+      const sessionCheckPromise = db.getCurrentUser();
+      const u = await Promise.race([sessionCheckPromise, timeoutPromise]) as User | null;
+      setUser(u);
+    } catch (err: any) {
+      console.error("Init Error:", err);
+      setInitError(err.message || "Impossible de connecter à Supabase.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     initApp();
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN') {
@@ -73,11 +77,21 @@ const App: React.FC = () => {
     return (
       <div className="h-screen bg-mandarin-black flex flex-col items-center justify-center text-mandarin-red p-6 text-center overflow-auto relative z-20">
         <AlertTriangle size={64} className="mb-6 animate-bounce-slight" />
-        <h2 className="text-2xl font-bold mb-2 text-white">Erreur de Configuration</h2>
+        <h2 className="text-2xl font-bold mb-2 text-white">Erreur de Connexion</h2>
+        <p className="text-gray-400 mb-6 max-w-xs mx-auto">{initError}</p>
+        
+        <button 
+          onClick={initApp}
+          className="bg-white text-black px-6 py-2 rounded-full font-bold hover:bg-gray-200 transition mb-8 flex items-center gap-2"
+        >
+          <RefreshCw size={18} /> Réessayer
+        </button>
+
         <div className="bg-mandarin-surface border border-mandarin-border p-8 rounded-2xl w-full max-w-md text-left shadow-2xl">
             <h3 className="text-white font-bold mb-6 flex items-center gap-2 text-lg">
                 <Settings size={20} /> Configuration Manuelle
             </h3>
+            <p className="text-xs text-gray-500 mb-4">Si le problème persiste, vérifiez les clés API.</p>
             <div className="space-y-4">
                 <input type="text" value={manualUrl} onChange={(e) => setManualUrl(e.target.value)} placeholder="Project URL" className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white text-sm focus:border-mandarin-blue outline-none" />
                 <input type="text" value={manualKey} onChange={(e) => setManualKey(e.target.value)} placeholder="Anon Key" className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white text-sm focus:border-mandarin-blue outline-none" />
