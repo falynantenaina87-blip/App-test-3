@@ -1,59 +1,44 @@
-
-import React, { useState, useEffect } from 'react';
-import { User, Announcement, UserRole } from '../types';
-import { db } from '../services/databaseService';
+import React, { useState } from 'react';
+import { User, UserRole } from '../types';
 import { Bell, AlertTriangle, Plus, Pin, Trash2 } from 'lucide-react';
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
+import { Id } from "../convex/_generated/dataModel";
 
 interface AnnouncementsProps {
   currentUser: User;
 }
 
 const Announcements: React.FC<AnnouncementsProps> = ({ currentUser }) => {
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const announcements = useQuery(api.main.listAnnouncements) || [];
+  const postAnnouncement = useMutation(api.main.postAnnouncement);
+  const deleteAnnouncement = useMutation(api.main.deleteAnnouncement);
+
   const [isCreating, setIsCreating] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
   const [isUrgent, setIsUrgent] = useState(false);
 
-  useEffect(() => {
-    const loadData = async () => {
-      const data = await db.getAnnouncements();
-      setAnnouncements(data);
-    };
-    loadData();
-
-    // Subscribe to ALL changes (Insert, Update, Delete)
-    const subscription = db.subscribeToAnnouncements(() => {
-        loadData();
-    });
-
-    return () => {
-        subscription.unsubscribe();
-    };
-  }, []);
-
   const handlePost = async () => {
     if (!newTitle || !newContent) return;
     try {
-        await db.postAnnouncement(newTitle, newContent, isUrgent ? 'URGENT' : 'NORMAL');
+        await postAnnouncement({
+            title: newTitle,
+            content: newContent,
+            priority: isUrgent ? 'URGENT' : 'NORMAL'
+        });
         setIsCreating(false);
         setNewTitle('');
         setNewContent('');
         setIsUrgent(false);
     } catch (e: any) {
-        console.error("Failed to post", e);
-        alert(`Erreur: ${e.message || "Impossible de publier l'annonce"}`);
+        alert("Erreur publication");
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm("Voulez-vous vraiment supprimer cette annonce ?")) {
-      try {
-        await db.deleteAnnouncement(id);
-      } catch (e: any) {
-        console.error("Failed to delete", e);
-        alert(`Erreur suppression: ${e.message}`);
-      }
+    if (confirm("Supprimer l'annonce ?")) {
+      await deleteAnnouncement({ id: id as Id<"announcements"> });
     }
   };
 
@@ -124,9 +109,7 @@ const Announcements: React.FC<AnnouncementsProps> = ({ currentUser }) => {
                 ? 'bg-gradient-to-br from-red-900/20 to-black border-red-500/30 shadow-[0_0_20px_rgba(220,38,38,0.1)]' 
                 : 'glass-panel border-white/5'
             }`}
-            style={{ animationDelay: `${idx * 100}ms` }}
           >
-            {/* Pin Icon */}
             <div className="absolute -top-3 -right-3 w-8 h-8 bg-black border border-white/20 rounded-full flex items-center justify-center shadow-lg transform group-hover:rotate-12 transition-transform z-10">
                 <Pin size={14} className={ann.priority === 'URGENT' ? 'text-mandarin-red' : 'text-mandarin-blue'} fill="currentColor"/>
             </div>
@@ -140,7 +123,7 @@ const Announcements: React.FC<AnnouncementsProps> = ({ currentUser }) => {
                 <button 
                   onClick={() => handleDelete(ann.id)}
                   className="text-gray-500 hover:text-red-500 transition-colors p-1"
-                  title="Supprimer l'annonce"
+                  title="Supprimer"
                 >
                   <Trash2 size={16} />
                 </button>
@@ -159,7 +142,7 @@ const Announcements: React.FC<AnnouncementsProps> = ({ currentUser }) => {
         
         {announcements.length === 0 && (
           <div className="text-center text-gray-500 mt-20 italic font-serif">
-            Aucune annonce officielle pour le moment.
+            Aucune annonce officielle.
           </div>
         )}
       </div>

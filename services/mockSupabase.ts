@@ -1,1 +1,2 @@
-// This file is deprecated. Please use databaseService.ts and supabaseClient.ts
+// Obsolète.
+export {};

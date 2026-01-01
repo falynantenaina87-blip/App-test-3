@@ -1,44 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Message, UserRole } from '../types';
-import { db } from '../services/databaseService';
-import { translateToMandarin } from '../services/geminiService';
-import { Send, Globe, Sparkles, WifiOff, Loader2, ScrollText, Feather } from 'lucide-react';
+import { User, UserRole } from '../types';
+import { Send, Globe, Sparkles, Loader2, ScrollText, Feather } from 'lucide-react';
+
+// CONVEX
+import { useQuery, useMutation, useAction } from "convex/react";
+import { api } from "../convex/_generated/api";
+import { Id } from "../convex/_generated/dataModel";
 
 interface ChatProps {
   currentUser: User;
 }
 
 const Chat: React.FC<ChatProps> = ({ currentUser }) => {
-  const [messages, setMessages] = useState<Message[]>([]);
+  // 1 Ligne pour tout le système de message temps réel !
+  const messages = useQuery(api.main.listMessages) || [];
+  const sendMessage = useMutation(api.main.sendMessage);
+  const translate = useAction(api.actions.translateText);
+
   const [inputText, setInputText] = useState('');
   const [isTranslating, setIsTranslating] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'CONNECTING' | 'SUBSCRIBED' | 'ERROR'>('CONNECTING');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const containsChinese = (str: string) => /[\u4e00-\u9fa5]/.test(str);
-
-  useEffect(() => {
-    const loadMessages = async () => {
-      const msgs = await db.getMessages();
-      setMessages(msgs);
-    };
-    loadMessages();
-
-    const subscription = db.subscribeToMessages(
-      (newMessage) => {
-        setMessages((prev) => [...prev, newMessage]);
-      },
-      (status) => {
-        if (status === 'SUBSCRIBED') setConnectionStatus('SUBSCRIBED');
-        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') setConnectionStatus('ERROR');
-        else setConnectionStatus('CONNECTING');
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -48,13 +31,14 @@ const Chat: React.FC<ChatProps> = ({ currentUser }) => {
     if (!inputText.trim()) return;
     const textToSend = inputText;
     setInputText('');
-    await db.sendMessage(textToSend, currentUser.id);
+    await sendMessage({ content: textToSend, user_id: currentUser.id as Id<"users"> });
   };
 
   const handleGeminiAssist = async () => {
     if (!inputText.trim()) return;
     setIsTranslating(true);
-    const translation = await translateToMandarin(inputText);
+    // Appel sécurisé au serveur
+    const translation = await translate({ text: inputText });
     setIsTranslating(false);
 
     if (translation) {
@@ -68,7 +52,7 @@ const Chat: React.FC<ChatProps> = ({ currentUser }) => {
 
   return (
     <div className="flex flex-col h-full bg-transparent text-white relative">
-      {/* Premium Header */}
+      {/* Header */}
       <div className="glass px-6 py-5 sticky top-0 z-20 shadow-xl border-b border-white/5">
         <div className="flex justify-between items-center max-w-5xl mx-auto w-full">
             <div className="flex items-center gap-3">
@@ -86,15 +70,10 @@ const Chat: React.FC<ChatProps> = ({ currentUser }) => {
             </div>
             
             <div className="flex items-center gap-3">
-               {/* Status Badge */}
-               <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border backdrop-blur-md transition-all duration-500 ${
-                   connectionStatus === 'SUBSCRIBED' 
-                   ? 'bg-mandarin-green/10 border-mandarin-green/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]' 
-                   : 'bg-red-500/10 border-red-500/30'
-               }`}>
-                   <div className={`w-2 h-2 rounded-full ${connectionStatus === 'SUBSCRIBED' ? 'bg-mandarin-green animate-pulse' : 'bg-red-500'}`} />
-                   <span className={`text-[10px] font-bold tracking-wider ${connectionStatus === 'SUBSCRIBED' ? 'text-mandarin-green' : 'text-red-400'}`}>
-                       {connectionStatus === 'SUBSCRIBED' ? 'LIVE' : 'OFF'}
+               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border bg-mandarin-green/10 border-mandarin-green/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+                   <div className="w-2 h-2 rounded-full bg-mandarin-green animate-pulse" />
+                   <span className="text-[10px] font-bold tracking-wider text-mandarin-green">
+                       LIVE
                    </span>
                </div>
             </div>
@@ -109,7 +88,6 @@ const Chat: React.FC<ChatProps> = ({ currentUser }) => {
                 <Feather size={48} className="text-gray-500" />
             </div>
             <p className="text-lg font-serif italic text-gray-400">Le début du savoir est le silence...</p>
-            <p className="text-xs uppercase tracking-widest mt-2">Commencez la discussion</p>
           </div>
         )}
 
@@ -119,11 +97,8 @@ const Chat: React.FC<ChatProps> = ({ currentUser }) => {
           const isChineseContent = containsChinese(msg.content);
           const senderRole = msg.profile?.role;
           
-          // Animation delay based on index for initial load feels nice
-          const animDelay = index > messages.length - 5 ? 'animate-slide-up' : '';
-
           return (
-            <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${animDelay} group`}>
+            <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-slide-up group`}>
               <div className="flex flex-col max-w-[85%] md:max-w-[70%]">
                   <div className={`flex items-center gap-2 mb-1 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
                      <span className={`text-xs font-bold tracking-wide ${isMe ? 'text-mandarin-blue' : 'text-gray-400'}`}>

@@ -1,4 +1,3 @@
-
 export enum UserRole {
   STUDENT = 'élève',
   ADMIN = 'professeur'

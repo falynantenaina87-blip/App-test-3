@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { HashRouter } from 'react-router-dom';
 import Auth from './components/Auth';
@@ -6,158 +5,76 @@ import Chat from './components/Chat';
 import Announcements from './components/Announcements';
 import Quiz from './components/Quiz';
 import Schedule from './components/Schedule';
-import { db } from './services/databaseService';
-import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 import { User } from './types';
-import { MessageSquare, Bell, BookOpen, LogOut, Calendar, AlertTriangle, Settings, RefreshCw, Server, CloudLightning } from 'lucide-react';
+import { MessageSquare, Bell, BookOpen, LogOut, Calendar, CloudLightning } from 'lucide-react';
+
+import { useQuery } from "convex/react";
+import { api } from "./convex/_generated/api";
+import { Id } from "./convex/_generated/dataModel";
 
 type View = 'CHAT' | 'ANNOUNCEMENTS' | 'QUIZ' | 'SCHEDULE';
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
+  // Gestion d'état utilisateur simplifiée via LocalStorage pour l'ID
+  const [userId, setUserId] = useState<Id<"users"> | null>(() => {
+    return localStorage.getItem("convex_user_id") as Id<"users"> | null;
+  });
+
   const [currentView, setCurrentView] = useState<View>('CHAT');
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSlowLoading, setIsSlowLoading] = useState(false);
-  const [initError, setInitError] = useState<string | null>(null);
   
-  const [manualUrl, setManualUrl] = useState('');
-  const [manualKey, setManualKey] = useState('');
-
-  const initApp = async () => {
-    // 1. Vérification immédiate de la configuration
-    if (!isSupabaseConfigured()) {
-       setInitError("Application non configurée. Veuillez entrer l'URL et la Clé API de votre projet Supabase.");
-       setIsLoading(false);
-       return;
-    }
-
-    setIsLoading(true);
-    setIsSlowLoading(false);
-    setInitError(null);
-
-    // Timer pour afficher le message "Réveil du serveur" si ça prend plus de 2s
-    const slowTimer = setTimeout(() => setIsSlowLoading(true), 2500);
-
-    try {
-      // Augmentation drastique du timeout à 45s pour les "cold starts" de Supabase (Free Tier)
-      // Les serveurs gratuits se mettent en veille et mettent ~20-30s à se réveiller.
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Le serveur met trop de temps à répondre (Cold Start).")), 45000)
-      );
-      
-      const sessionCheckPromise = db.getCurrentUser();
-      
-      const u = await Promise.race([sessionCheckPromise, timeoutPromise]) as User | null;
-      setUser(u);
-    } catch (err: any) {
-      console.error("Init Error:", err);
-      setInitError(err.message || "Impossible de connecter à Supabase.");
-    } finally {
-      clearTimeout(slowTimer);
-      setIsLoading(false);
-      setIsSlowLoading(false);
-    }
-  };
-
+  // Convex Query: Récupère l'utilisateur. Si userId est null, la query est "skipped"
+  const user = useQuery(api.main.getUser, userId ? { id: userId } : "skip");
+  
+  // Si on a un ID mais que la query renvoie null (ex: user supprimé), on logout
   useEffect(() => {
-    initApp();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN') {
-         try { const u = await db.getCurrentUser(); setUser(u); } catch(e) { console.error(e); }
-      } else if (event === 'SIGNED_OUT') { setUser(null); }
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const handleLogout = () => db.logout();
-
-  const saveConfig = () => {
-    if (manualUrl && manualKey) {
-        localStorage.setItem('VITE_SUPABASE_URL', manualUrl);
-        localStorage.setItem('VITE_SUPABASE_ANON_KEY', manualKey);
-        window.location.reload();
+    if (userId && user === null) {
+        localStorage.removeItem("convex_user_id");
+        setUserId(null);
     }
+  }, [user, userId]);
+
+  const handleLogin = (u: any) => {
+      // 'u' vient du composant Auth (objet user complet)
+      localStorage.setItem("convex_user_id", u._id);
+      setUserId(u._id);
   };
 
-  if (isLoading) {
-    return (
-      <div className="h-screen bg-mandarin-black flex flex-col items-center justify-center text-white gap-8 relative z-20 p-6 text-center">
-        <div className="relative">
-             <div className="w-20 h-20 border-4 border-white/10 rounded-full"></div>
-             <div className="w-20 h-20 border-4 border-mandarin-blue border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
-             <div className="absolute inset-0 flex items-center justify-center">
-                 <Server size={24} className="text-white/30" />
-             </div>
+  const handleLogout = () => {
+      localStorage.removeItem("convex_user_id");
+      setUserId(null);
+      // Force reload to clean states
+      window.location.reload();
+  };
+
+  // Tant qu'on n'a pas déterminé l'état de l'utilisateur
+  if (userId && user === undefined) {
+      return (
+        <div className="h-screen bg-mandarin-black flex items-center justify-center">
+            <div className="animate-spin text-mandarin-blue"><CloudLightning size={40} /></div>
         </div>
-        
-        <div className="space-y-2 animate-fade-in">
-            <p className="text-xs tracking-[0.3em] font-bold text-mandarin-blue uppercase">Connexion</p>
-            {isSlowLoading && (
-                <div className="bg-mandarin-yellow/10 border border-mandarin-yellow/20 p-4 rounded-xl max-w-xs mx-auto animate-slide-up">
-                    <p className="text-mandarin-yellow font-bold text-sm mb-1 flex items-center justify-center gap-2">
-                        <CloudLightning size={16} />
-                        Réveil de la base de données...
-                    </p>
-                    <p className="text-gray-400 text-xs leading-relaxed">
-                        Le serveur Supabase (version gratuite) sort de veille. Cela peut prendre jusqu'à 30 secondes. Merci de patienter.
-                    </p>
-                </div>
-            )}
-        </div>
-      </div>
-    );
+      );
   }
 
-  if (initError) {
-    return (
-      <div className="h-screen bg-mandarin-black flex flex-col items-center justify-center text-mandarin-red p-6 text-center overflow-auto relative z-20">
-        <AlertTriangle size={64} className="mb-6 animate-bounce-slight" />
-        <h2 className="text-2xl font-bold mb-2 text-white">Connexion Interrompue</h2>
-        <p className="text-gray-400 mb-6 max-w-xs mx-auto text-sm">{initError}</p>
-        
-        {isSupabaseConfigured() && (
-            <button 
-            onClick={initApp}
-            className="bg-white text-black px-8 py-3 rounded-full font-bold hover:bg-gray-200 transition mb-8 flex items-center gap-2 shadow-lg active:scale-95"
-            >
-            <RefreshCw size={18} /> Réessayer
-            </button>
-        )}
-
-        <div className="bg-mandarin-surface border border-mandarin-border p-8 rounded-2xl w-full max-w-md text-left shadow-2xl">
-            <h3 className="text-white font-bold mb-6 flex items-center gap-2 text-lg">
-                <Settings size={20} /> Paramètres Supabase
-            </h3>
-            <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-                Si l'erreur persiste, vérifiez que l'URL et la Clé API sont correctes dans Vercel ou ci-dessous.
-            </p>
-            <div className="space-y-4">
-                <div>
-                    <label className="text-xs text-gray-400 font-bold ml-1 mb-1 block">Project URL</label>
-                    <input type="text" value={manualUrl} onChange={(e) => setManualUrl(e.target.value)} placeholder="https://..." className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white text-sm focus:border-mandarin-blue outline-none transition-colors" />
-                </div>
-                <div>
-                    <label className="text-xs text-gray-400 font-bold ml-1 mb-1 block">Project API Key (anon/public)</label>
-                    <input type="text" value={manualKey} onChange={(e) => setManualKey(e.target.value)} placeholder="eyJhbG..." className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white text-sm focus:border-mandarin-blue outline-none transition-colors" />
-                </div>
-                <button onClick={saveConfig} disabled={!manualUrl || !manualKey} className="w-full bg-mandarin-blue text-white py-3 rounded-xl hover:shadow-glow-blue transition font-bold text-sm mt-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                    Enregistrer et Connecter
-                </button>
-            </div>
-        </div>
-      </div>
-    );
+  // Si pas connecté
+  if (!userId || !user) {
+      return <Auth onLogin={handleLogin} />;
   }
 
-  if (!user) return <Auth onLogin={setUser} />;
+  // Conversion du user Convex vers notre type User frontend
+  const currentUser: User = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role as any
+  };
 
   const renderContent = () => {
     switch (currentView) {
-      case 'CHAT': return <Chat currentUser={user} />;
-      case 'ANNOUNCEMENTS': return <Announcements currentUser={user} />;
-      case 'QUIZ': return <Quiz currentUser={user} />;
-      case 'SCHEDULE': return <Schedule currentUser={user} />;
-      default: return <Chat currentUser={user} />;
+      case 'CHAT': return <Chat currentUser={currentUser} />;
+      case 'ANNOUNCEMENTS': return <Announcements currentUser={currentUser} />;
+      case 'QUIZ': return <Quiz currentUser={currentUser} />;
+      case 'SCHEDULE': return <Schedule currentUser={currentUser} />;
+      default: return <Chat currentUser={currentUser} />;
     }
   };
 

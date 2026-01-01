@@ -1,8 +1,9 @@
-
-import React, { useState, useEffect } from 'react';
-import { User, ScheduleItem, UserRole } from '../types';
-import { db } from '../services/databaseService';
+import React, { useState } from 'react';
+import { User, UserRole } from '../types';
 import { Calendar, Plus, Trash2, Clock, MapPin, Book } from 'lucide-react';
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
+import { Id } from "../convex/_generated/dataModel";
 
 interface ScheduleProps {
   currentUser: User;
@@ -11,10 +12,11 @@ interface ScheduleProps {
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
 const Schedule: React.FC<ScheduleProps> = ({ currentUser }) => {
-  const [items, setItems] = useState<ScheduleItem[]>([]);
+  const items = useQuery(api.main.listSchedule) || [];
+  const addScheduleItem = useMutation(api.main.addScheduleItem);
+  const deleteScheduleItem = useMutation(api.main.deleteScheduleItem);
+
   const [isAdding, setIsAdding] = useState(false);
-  
-  // Form states
   const [day, setDay] = useState(DAYS[0]);
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
@@ -23,56 +25,25 @@ const Schedule: React.FC<ScheduleProps> = ({ currentUser }) => {
 
   const isAdmin = currentUser.role === UserRole.ADMIN;
 
-  useEffect(() => {
-    const loadData = async () => {
-      const data = await db.getSchedule();
-      setItems(data);
-    };
-    loadData();
-
-    const subscription = db.subscribeToSchedule(() => {
-      loadData();
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
-
   const handleAdd = async () => {
     if (!startTime || !endTime || !subject || !room) return;
-    
-    try {
-      await db.addScheduleItem({
-        day,
-        time: `${startTime} - ${endTime}`,
-        subject,
-        room
-      });
-      setIsAdding(false);
-      setSubject('');
-      setRoom('');
-      setStartTime('');
-      setEndTime('');
-    } catch (e: any) {
-      console.error(e);
-      // Afficher l'erreur exacte venant de Supabase
-      alert(`Erreur: ${e.message || "Impossible d'ajouter le cours"}`);
-    }
+    await addScheduleItem({
+      day,
+      time: `${startTime} - ${endTime}`,
+      subject,
+      room
+    });
+    setIsAdding(false);
+    setSubject('');
+    setRoom('');
   };
 
   const handleDelete = async (id: string) => {
     if (confirm("Supprimer ce cours ?")) {
-      try {
-        await db.deleteScheduleItem(id);
-      } catch (e: any) {
-        console.error(e);
-        alert(`Erreur suppression: ${e.message}`);
-      }
+      await deleteScheduleItem({ id: id as Id<"schedule"> });
     }
   };
 
-  // Group items by day
   const groupedItems = DAYS.map(d => ({
     day: d,
     courses: items
@@ -100,104 +71,38 @@ const Schedule: React.FC<ScheduleProps> = ({ currentUser }) => {
 
       {isAdding && (
         <div className="glass-panel border-l-4 border-l-mandarin-yellow p-6 rounded-xl mb-8 animate-slide-up">
-          <h3 className="text-mandarin-yellow font-bold mb-4 flex items-center gap-2 text-lg">
-             <Calendar size={20} /> Ajouter un cours
-          </h3>
-          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-             <select 
-               value={day} 
-               onChange={(e) => setDay(e.target.value)}
-               className="bg-black/50 border border-white/10 rounded-lg p-3 text-white outline-none focus:border-mandarin-yellow"
-             >
+             <select value={day} onChange={(e) => setDay(e.target.value)} className="bg-black/50 border border-white/10 rounded-lg p-3 text-white outline-none">
                 {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
              </select>
-
              <div className="flex items-center gap-2">
-               <input 
-                 type="time" 
-                 value={startTime}
-                 onChange={(e) => setStartTime(e.target.value)}
-                 className="flex-1 bg-black/50 border border-white/10 rounded-lg p-3 text-white outline-none focus:border-mandarin-yellow"
-               />
+               <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="flex-1 bg-black/50 border border-white/10 rounded-lg p-3 text-white outline-none" />
                <span className="text-white">-</span>
-               <input 
-                 type="time" 
-                 value={endTime}
-                 onChange={(e) => setEndTime(e.target.value)}
-                 className="flex-1 bg-black/50 border border-white/10 rounded-lg p-3 text-white outline-none focus:border-mandarin-yellow"
-               />
+               <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="flex-1 bg-black/50 border border-white/10 rounded-lg p-3 text-white outline-none" />
              </div>
-
-             <input 
-               type="text" 
-               placeholder="Matière (ex: Grammaire)" 
-               value={subject}
-               onChange={(e) => setSubject(e.target.value)}
-               className="bg-black/50 border border-white/10 rounded-lg p-3 text-white outline-none focus:border-mandarin-yellow"
-             />
-
-             <input 
-               type="text" 
-               placeholder="Salle (ex: A-102)" 
-               value={room}
-               onChange={(e) => setRoom(e.target.value)}
-               className="bg-black/50 border border-white/10 rounded-lg p-3 text-white outline-none focus:border-mandarin-yellow"
-             />
+             <input type="text" placeholder="Matière" value={subject} onChange={(e) => setSubject(e.target.value)} className="bg-black/50 border border-white/10 rounded-lg p-3 text-white outline-none" />
+             <input type="text" placeholder="Salle" value={room} onChange={(e) => setRoom(e.target.value)} className="bg-black/50 border border-white/10 rounded-lg p-3 text-white outline-none" />
           </div>
-
-          <div className="flex justify-end">
-            <button
-              onClick={handleAdd}
-              className="bg-mandarin-yellow text-black px-6 py-2 rounded-lg font-bold hover:shadow-glow-gold transition"
-            >
-              Ajouter
-            </button>
-          </div>
+          <button onClick={handleAdd} className="w-full bg-mandarin-yellow text-black px-6 py-2 rounded-lg font-bold">Ajouter</button>
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {groupedItems.map((group) => (
           <div key={group.day} className="flex flex-col gap-3">
-            <h3 className="text-xl font-serif font-bold text-gray-400 border-b border-white/10 pb-2 mb-1 px-2">
-              {group.day}
-            </h3>
-            
-            {group.courses.length === 0 ? (
-               <div className="p-4 rounded-xl border border-white/5 bg-white/5 text-gray-600 text-xs italic text-center">
-                 Pas de cours
-               </div>
-            ) : (
-               group.courses.map(item => (
-                 <div key={item.id} className="relative group glass-panel p-4 rounded-xl border border-white/5 hover:border-mandarin-yellow/30 transition-all hover:translate-x-1">
+            <h3 className="text-xl font-serif font-bold text-gray-400 border-b border-white/10 pb-2 mb-1 px-2">{group.day}</h3>
+            {group.courses.map(item => (
+                 <div key={item.id} className="glass-panel p-4 rounded-xl border border-white/5 relative group">
                     <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center gap-2 text-mandarin-yellow text-sm font-bold bg-mandarin-yellow/10 px-2 py-1 rounded">
-                             <Clock size={14} />
-                             {item.time}
+                             <Clock size={14} /> {item.time}
                         </div>
-                        {isAdmin && (
-                          <button 
-                            onClick={() => handleDelete(item.id)}
-                            className="text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
+                        {isAdmin && <button onClick={() => handleDelete(item.id)} className="text-red-500 opacity-0 group-hover:opacity-100"><Trash2 size={14} /></button>}
                     </div>
-                    
-                    <h4 className="text-white font-bold mb-1 flex items-center gap-2">
-                        <Book size={16} className="text-mandarin-blue"/>
-                        {item.subject}
-                    </h4>
-                    
-                    <div className="flex items-center gap-2 text-gray-400 text-xs mt-2">
-                        <MapPin size={12} />
-                        Salle {item.room}
-                    </div>
+                    <h4 className="text-white font-bold mb-1 flex items-center gap-2"><Book size={16} className="text-mandarin-blue"/>{item.subject}</h4>
+                    <div className="flex items-center gap-2 text-gray-400 text-xs mt-2"><MapPin size={12} />Salle {item.room}</div>
                  </div>
-               ))
-            )}
+            ))}
           </div>
         ))}
       </div>

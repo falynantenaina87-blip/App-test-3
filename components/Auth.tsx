@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { db } from '../services/databaseService';
 import { User, UserRole } from '../types';
-import { Lock, ArrowRight, ScrollText, Mail, User as UserIcon, Key, CheckCircle, Sparkles, Loader2 } from 'lucide-react';
+import { Lock, ArrowRight, ScrollText, Mail, User as UserIcon, Key, CheckCircle, Loader2, Sparkles } from 'lucide-react';
+import { useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
 
 interface AuthProps {
-  onLogin: (user: User) => void;
+  onLogin: (user: any) => void;
 }
 
 const SECRET_CODES = {
@@ -21,50 +22,39 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [secretCode, setSecretCode] = useState('');
   
   const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  const loginMutation = useMutation(api.main.login);
+  const registerMutation = useMutation(api.main.register);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setSuccessMsg(null);
     setIsLoading(true);
 
     try {
       if (isLogin) {
-        const { error } = await db.login(email, password);
-        if (error) throw error;
+        const user = await loginMutation({ email, password });
+        if (!user) {
+            throw new Error("Identifiants incorrects.");
+        }
+        onLogin(user);
       } else {
-        let role: UserRole | null = null;
-        if (secretCode === SECRET_CODES.STUDENT) {
-          role = UserRole.STUDENT;
-        } else if (secretCode === SECRET_CODES.ADMIN) {
-          role = UserRole.ADMIN;
-        } else {
-          throw new Error("Code secret invalide.");
-        }
+        let role = '';
+        if (secretCode === SECRET_CODES.STUDENT) role = UserRole.STUDENT;
+        else if (secretCode === SECRET_CODES.ADMIN) role = UserRole.ADMIN;
+        else throw new Error("Code secret invalide.");
 
-        if (!name.trim()) throw new Error("Veuillez entrer votre nom.");
+        if (!name.trim()) throw new Error("Nom requis.");
 
-        const { data, error } = await db.signUp(email, password, name, role);
-        if (error) throw error;
-
-        if (data.user && !data.session) {
-          setSuccessMsg("Vérifiez votre boîte mail pour confirmer.");
-          setIsLoading(false);
-          return; 
-        }
+        const user = await registerMutation({ email, password, name, role });
+        onLogin(user);
       }
     } catch (err: any) {
       console.error(err);
-      if (err.message.includes('Invalid login')) {
-        setError("Identifiants incorrects.");
-      } else {
-        setError(err.message || "Erreur inconnue.");
-      }
+      setError(err.message || "Erreur inconnue.");
     } finally {
-      if (!isLogin && !successMsg) setIsLoading(false);
-      else if (error) setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -102,32 +92,19 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           ></div>
           <button 
             className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all relative z-10 ${isLogin ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
-            onClick={() => { setIsLogin(true); setError(null); setSuccessMsg(null); }}
+            onClick={() => { setIsLogin(true); setError(null); }}
           >
             Connexion
           </button>
           <button 
             className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all relative z-10 ${!isLogin ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
-            onClick={() => { setIsLogin(false); setError(null); setSuccessMsg(null); }}
+            onClick={() => { setIsLogin(false); setError(null); }}
           >
             Inscription
           </button>
         </div>
 
-        {successMsg ? (
-          <div className="bg-mandarin-green/10 border border-mandarin-green/50 p-6 rounded-2xl text-center animate-fade-in shadow-glow-blue">
-            <CheckCircle className="mx-auto text-mandarin-green mb-4" size={56} />
-            <h3 className="text-white font-bold mb-2 text-lg">Inscription Réussie</h3>
-            <p className="text-gray-300 text-sm leading-relaxed">{successMsg}</p>
-            <button 
-              onClick={() => { setIsLogin(true); setSuccessMsg(null); }}
-              className="mt-6 w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white py-3 rounded-xl transition font-medium"
-            >
-              Retour à la connexion
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-5">
             
             {!isLogin && (
               <div className="animate-fade-in space-y-5">
@@ -199,8 +176,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                   : 'Créer le compte'
               }
             </button>
-          </form>
-        )}
+        </form>
       </div>
     </div>
   );
