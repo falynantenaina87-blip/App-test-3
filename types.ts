@@ -1,3 +1,4 @@
+
 export enum UserRole {
   STUDENT = 'élève',
   ADMIN = 'professeur'
@@ -27,6 +28,15 @@ export interface Announcement {
   content: string;
   created_at: string;
   priority: 'NORMAL' | 'URGENT';
+}
+
+export interface ScheduleItem {
+  id: string;
+  day: string; // Lundi, Mardi...
+  time: string; // "09:00 - 10:30"
+  subject: string;
+  room: string;
+  created_at?: string;
 }
 
 export interface QuizQuestion {

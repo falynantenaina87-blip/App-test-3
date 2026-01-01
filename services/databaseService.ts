@@ -1,5 +1,6 @@
+
 import { supabase } from './supabaseClient';
-import { User, UserRole, Message, Announcement, QuizResult } from '../types';
+import { User, UserRole, Message, Announcement, QuizResult, ScheduleItem } from '../types';
 
 export const db = {
   // --- AUTH & PROFILE ---
@@ -39,8 +40,6 @@ export const db = {
     if (authError) throw authError;
 
     // 2. Create Public Profile
-    // Note: Ideally a Postgres Trigger handles this, but we do it manually here to be safe
-    // in case the trigger isn't set up in the user's DB.
     if (authData.user) {
       const { error: profileError } = await supabase
         .from('profiles')
@@ -49,13 +48,12 @@ export const db = {
             id: authData.user.id, 
             name: name, 
             role: role,
-            email: email // Storing email in profile for easier admin visibility
+            email: email 
           }
         ]);
       
       if (profileError) {
         console.error("Error creating profile:", profileError);
-        // If profile creation fails (e.g. trigger already did it), we continue.
       }
     }
 
@@ -99,7 +97,6 @@ export const db = {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
         async (payload) => {
-          // Fetch the full relation for the new message
           const { data } = await supabase
             .from('messages')
             .select(`*, profile:profiles(name, role)`)
@@ -132,6 +129,14 @@ export const db = {
     if (error) throw error;
   },
 
+  deleteAnnouncement: async (id: string) => {
+    const { error } = await supabase
+      .from('announcements')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  },
+
   subscribeToAnnouncements: (callback: () => void) => {
     return supabase
       .channel('public:announcements')
@@ -143,13 +148,51 @@ export const db = {
       .subscribe();
   },
 
+  // --- SCHEDULE / EMPLOI DU TEMPS (Realtime) ---
+  getSchedule: async (): Promise<ScheduleItem[]> => {
+    const { data, error } = await supabase
+      .from('schedule')
+      .select('*')
+      // On triera côté client par jour/heure pour plus de flexibilité
+      .order('day', { ascending: true }); 
+
+    if (error) console.error(error);
+    return data || [];
+  },
+
+  addScheduleItem: async (item: Omit<ScheduleItem, 'id' | 'created_at'>) => {
+    const { error } = await supabase
+      .from('schedule')
+      .insert([item]);
+    if (error) throw error;
+  },
+
+  deleteScheduleItem: async (id: string) => {
+    const { error } = await supabase
+      .from('schedule')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  subscribeToSchedule: (callback: () => void) => {
+    return supabase
+      .channel('public:schedule')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'schedule' },
+        () => callback()
+      )
+      .subscribe();
+  },
+
   // --- QUIZZES ---
   checkQuizSubmission: async (userId: string): Promise<QuizResult | null> => {
     const { data } = await supabase
       .from('quiz_results')
       .select('*')
       .eq('user_id', userId)
-      .limit(1) // Assuming one quiz for this demo context
+      .limit(1) 
       .maybeSingle();
     
     return data;

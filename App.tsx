@@ -1,15 +1,17 @@
+
 import React, { useState, useEffect } from 'react';
 import { HashRouter } from 'react-router-dom';
 import Auth from './components/Auth';
 import Chat from './components/Chat';
 import Announcements from './components/Announcements';
 import Quiz from './components/Quiz';
+import Schedule from './components/Schedule';
 import { db } from './services/databaseService';
 import { supabase } from './services/supabaseClient';
 import { User } from './types';
-import { MessageSquare, Bell, BookOpen, LogOut, BarChart2, AlertTriangle, Settings } from 'lucide-react';
+import { MessageSquare, Bell, BookOpen, LogOut, Calendar, AlertTriangle, Settings } from 'lucide-react';
 
-type View = 'CHAT' | 'ANNOUNCEMENTS' | 'QUIZ' | 'DASHBOARD';
+type View = 'CHAT' | 'ANNOUNCEMENTS' | 'QUIZ' | 'SCHEDULE';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -93,13 +95,7 @@ const App: React.FC = () => {
       case 'CHAT': return <Chat currentUser={user} />;
       case 'ANNOUNCEMENTS': return <Announcements currentUser={user} />;
       case 'QUIZ': return <Quiz currentUser={user} />;
-      case 'DASHBOARD': return (
-        <div className="h-full flex flex-col items-center justify-center text-gray-500 p-8 text-center animate-fade-in">
-            <BarChart2 size={80} className="mb-6 text-gray-700 opacity-50"/>
-            <h2 className="text-2xl text-white mb-2 font-serif">Statistiques</h2>
-            <p className="text-gray-400">Le module de suivi sera disponible bientôt.</p>
-        </div>
-      );
+      case 'SCHEDULE': return <Schedule currentUser={user} />;
       default: return <Chat currentUser={user} />;
     }
   };
@@ -142,11 +138,21 @@ const App: React.FC = () => {
             <div className="w-[1px] h-6 bg-white/10 mx-1"></div>
 
             <NavButton 
+                active={currentView === 'SCHEDULE'} 
+                onClick={() => setCurrentView('SCHEDULE')} 
+                icon={<Calendar size={26} strokeWidth={currentView === 'SCHEDULE' ? 2.5 : 2} />} 
+                label="Planning"
+                activeColor="text-mandarin-yellow"
+            />
+
+            <div className="w-[1px] h-6 bg-white/10 mx-1"></div>
+
+            <NavButton 
                 active={currentView === 'QUIZ'} 
                 onClick={() => setCurrentView('QUIZ')} 
                 icon={<BookOpen size={26} strokeWidth={currentView === 'QUIZ' ? 2.5 : 2} />} 
                 label="Quiz"
-                activeColor="text-mandarin-yellow"
+                activeColor="text-mandarin-green"
             />
             
             <div className="w-[1px] h-6 bg-white/10 mx-1"></div>

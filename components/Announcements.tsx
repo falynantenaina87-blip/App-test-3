@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, Announcement, UserRole } from '../types';
 import { db } from '../services/databaseService';
-import { Bell, AlertTriangle, Plus, Pin } from 'lucide-react';
+import { Bell, AlertTriangle, Plus, Pin, Trash2 } from 'lucide-react';
 
 interface AnnouncementsProps {
   currentUser: User;
@@ -21,6 +22,7 @@ const Announcements: React.FC<AnnouncementsProps> = ({ currentUser }) => {
     };
     loadData();
 
+    // Subscribe to ALL changes (Insert, Update, Delete)
     const subscription = db.subscribeToAnnouncements(() => {
         loadData();
     });
@@ -40,6 +42,16 @@ const Announcements: React.FC<AnnouncementsProps> = ({ currentUser }) => {
         setIsUrgent(false);
     } catch (e) {
         console.error("Failed to post", e);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (confirm("Voulez-vous vraiment supprimer cette annonce ?")) {
+      try {
+        await db.deleteAnnouncement(id);
+      } catch (e) {
+        console.error("Failed to delete", e);
+      }
     }
   };
 
@@ -113,14 +125,24 @@ const Announcements: React.FC<AnnouncementsProps> = ({ currentUser }) => {
             style={{ animationDelay: `${idx * 100}ms` }}
           >
             {/* Pin Icon */}
-            <div className="absolute -top-3 -right-3 w-8 h-8 bg-black border border-white/20 rounded-full flex items-center justify-center shadow-lg transform group-hover:rotate-12 transition-transform">
+            <div className="absolute -top-3 -right-3 w-8 h-8 bg-black border border-white/20 rounded-full flex items-center justify-center shadow-lg transform group-hover:rotate-12 transition-transform z-10">
                 <Pin size={14} className={ann.priority === 'URGENT' ? 'text-mandarin-red' : 'text-mandarin-blue'} fill="currentColor"/>
             </div>
 
-            <div className="mb-3">
+            <div className="flex justify-between items-start mb-3">
               <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest border border-white/10 px-2 py-1 rounded">
                 {new Date(ann.created_at).toLocaleDateString()}
               </span>
+              
+              {isAdmin && (
+                <button 
+                  onClick={() => handleDelete(ann.id)}
+                  className="text-gray-500 hover:text-red-500 transition-colors p-1"
+                  title="Supprimer l'annonce"
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
             </div>
 
             <h3 className={`font-serif text-xl font-bold mb-2 ${ann.priority === 'URGENT' ? 'text-mandarin-red' : 'text-white'}`}>
@@ -132,6 +154,12 @@ const Announcements: React.FC<AnnouncementsProps> = ({ currentUser }) => {
             </p>
           </div>
         ))}
+        
+        {announcements.length === 0 && (
+          <div className="text-center text-gray-500 mt-20 italic font-serif">
+            Aucune annonce officielle pour le moment.
+          </div>
+        )}
       </div>
     </div>
   );
