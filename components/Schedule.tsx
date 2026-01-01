@@ -54,9 +54,10 @@ const Schedule: React.FC<ScheduleProps> = ({ currentUser }) => {
       setRoom('');
       setStartTime('');
       setEndTime('');
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Erreur lors de l'ajout");
+      // Afficher l'erreur exacte venant de Supabase
+      alert(`Erreur: ${e.message || "Impossible d'ajouter le cours"}`);
     }
   };
 
@@ -64,8 +65,9 @@ const Schedule: React.FC<ScheduleProps> = ({ currentUser }) => {
     if (confirm("Supprimer ce cours ?")) {
       try {
         await db.deleteScheduleItem(id);
-      } catch (e) {
+      } catch (e: any) {
         console.error(e);
+        alert(`Erreur suppression: ${e.message}`);
       }
     }
   };

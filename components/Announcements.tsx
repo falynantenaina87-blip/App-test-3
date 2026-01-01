@@ -40,8 +40,9 @@ const Announcements: React.FC<AnnouncementsProps> = ({ currentUser }) => {
         setNewTitle('');
         setNewContent('');
         setIsUrgent(false);
-    } catch (e) {
+    } catch (e: any) {
         console.error("Failed to post", e);
+        alert(`Erreur: ${e.message || "Impossible de publier l'annonce"}`);
     }
   };
 
@@ -49,8 +50,9 @@ const Announcements: React.FC<AnnouncementsProps> = ({ currentUser }) => {
     if (confirm("Voulez-vous vraiment supprimer cette annonce ?")) {
       try {
         await db.deleteAnnouncement(id);
-      } catch (e) {
+      } catch (e: any) {
         console.error("Failed to delete", e);
+        alert(`Erreur suppression: ${e.message}`);
       }
     }
   };
